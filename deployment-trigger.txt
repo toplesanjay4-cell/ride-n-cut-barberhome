@@ -1,0 +1,1 @@
+Trigger a fresh Vercel deployment to load the latest environment variables.
