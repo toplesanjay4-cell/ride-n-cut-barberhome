@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, Clock3, MapPin, Scissors, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 type Barber = { id: string; name: string };
-type ScheduleConfig={open_time:string;close_time:string;slot_interval:number;weekly_days_off:number[];blocked_dates:string[];blocked_times:string[]};\ntype SiteSettings = { brand_name:string; hero_title:string; hero_subtitle:string; accent_color:string; services:{name:string;description:string}[]; schedule_config?:ScheduleConfig };\nconst defaultSchedule:ScheduleConfig={open_time:"08:00",close_time:"21:00",slot_interval:60,weekly_days_off:[],blocked_dates:[],blocked_times:[]};
+type ScheduleConfig={open_time:string;close_time:string;slot_interval:number;weekly_days_off:number[];blocked_dates:string[];blocked_times:string[]};
+type SiteSettings = { brand_name:string; hero_title:string; hero_subtitle:string; accent_color:string; services:{name:string;description:string}[]; schedule_config?:ScheduleConfig };
+const defaultSchedule:ScheduleConfig={open_time:"08:00",close_time:"21:00",slot_interval:60,weekly_days_off:[],blocked_dates:[],blocked_times:[]};
 const defaultSettings:SiteSettings={brand_name:"RIDE N CUT.",hero_title:"YOUR CUT. YOUR PLACE.",hero_subtitle:"Potong rambut jadi lebih praktis. Pilih barber, tentukan jadwal, dan kami datang ke alamat Anda.",accent_color:"#d8ff35",services:[{name:"Personal Barber",description:"Pilih barber yang tersedia sesuai preferensi Anda."},{name:"Jadwal Teratur",description:"Satu sesi booking berlangsung selama 60 menit."},{name:"Datang ke Lokasi",description:"Masukkan alamat lengkap agar barber mudah menemukan Anda."}]};
 export default function Home() {
  const [barbers,setBarbers]=useState<Barber[]>([]); const [settings,setSettings]=useState<SiteSettings>(defaultSettings); const [schedule,setSchedule]=useState<ScheduleConfig>(defaultSchedule); const [loading,setLoading]=useState(true); const [message,setMessage]=useState(""); const [loadError,setLoadError]=useState("");
