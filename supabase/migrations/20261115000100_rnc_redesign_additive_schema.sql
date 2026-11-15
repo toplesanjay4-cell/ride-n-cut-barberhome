@@ -397,7 +397,13 @@ security definer
 set search_path = public
 as $$
 begin
-  if p_proof_path is null or length(p_proof_path) > 500 then
+  if p_proof_path is null or length(p_proof_path) > 500
+     or split_part(p_proof_path, '/', 1) <> p_booking_id::text
+     or split_part(p_proof_path, '/', 2) <> trim(p_code)
+     or split_part(p_proof_path, '/', 3) <> (
+       select regexp_replace(coalesce(b.phone,''),'[^0-9]','','g')
+       from public.bookings b where b.id = p_booking_id
+     ) then
     return false;
   end if;
 
