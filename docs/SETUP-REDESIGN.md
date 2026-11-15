@@ -41,6 +41,8 @@ Do not guess the UUID. This step preserves the existing Auth account and passwor
 - Admins can view the proof through a short-lived signed URL and manually verify receipt.
 - A transfer is not marked paid until an admin verifies it. Cash remains unpaid until the admin records receipt.
 - The current UI does not yet load payment method account details from the configurable `payment_methods` table; add and test those settings before public launch.
+- The admin finance tab now supports date-filtered expense entry and a preliminary revenue-minus-expense view. Revenue is counted only for completed bookings with a recorded paid payment.
+- Staff can read, add, and update expenses; only owners can delete expenses and manage custom expense categories. Verify these policies in a staging Supabase project before use.
 
 ## Current implementation boundary
 
