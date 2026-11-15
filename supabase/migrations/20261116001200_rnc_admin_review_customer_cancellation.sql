@@ -60,6 +60,7 @@ declare
 begin
   if auth.uid() is null
      or not public.rnc_has_role(array['owner','staff'])
+     or p_decision is null
      or p_decision not in ('approved','rejected') then
     return false;
   end if;
