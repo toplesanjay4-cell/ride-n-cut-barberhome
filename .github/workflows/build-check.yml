@@ -3,6 +3,7 @@ name: Build check
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [redesign/ride-n-cut-overhaul]
 
