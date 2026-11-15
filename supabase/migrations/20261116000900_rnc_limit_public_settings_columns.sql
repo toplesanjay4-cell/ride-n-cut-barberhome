@@ -4,6 +4,9 @@
 -- selects only the public presentation and schedule fields.
 revoke select on table public.site_settings from anon, public;
 
+-- Preserve full settings access for authenticated owner/staff sessions.
+grant select on table public.site_settings to authenticated;
+
 grant select (
   id,
   brand_name,
