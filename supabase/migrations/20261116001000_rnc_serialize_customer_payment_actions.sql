@@ -82,6 +82,13 @@ begin
     return false;
   end if;
 
+  if p_method <> 'cash' and not exists (
+    select 1 from public.payment_methods pm
+    where pm.method_type = p_method and pm.is_active = true
+  ) then
+    return false;
+  end if;
+
   select b.status into v_booking_status
   from public.bookings b
   where b.id = p_booking_id
