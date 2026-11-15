@@ -14,7 +14,7 @@ This redesign is being developed on `redesign/ride-n-cut-overhaul`. Do not deplo
 1. Open the correct Supabase project for Ride N Cut.
 2. Create/download a database backup first.
 3. Open SQL Editor and run `supabase/migrations/20261115000100_rnc_redesign_additive_schema.sql`.
-4. Run the remaining migrations in filename order: `20261116000100_rnc_atomic_booking_slots.sql`, `20261116000200_rnc_service_duration_booking.sql`, `20261116000300_rnc_booking_horizon_guard.sql`, `20261116000400_rnc_lock_payment_writes.sql`, `20261116000500_rnc_validate_payment_verification.sql`, `20261116000600_rnc_lock_booking_during_payment_verify.sql`, `20261116000700_rnc_enforce_owner_price_settings.sql`, and `20261116000800_rnc_customer_map_pin.sql`.
+4. Run the remaining migrations in filename order: `20261116000100_rnc_atomic_booking_slots.sql`, `20261116000200_rnc_service_duration_booking.sql`, `20261116000300_rnc_booking_horizon_guard.sql`, `20261116000400_rnc_lock_payment_writes.sql`, `20261116000500_rnc_validate_payment_verification.sql`, `20261116000600_rnc_lock_booking_during_payment_verify.sql`, `20261116000700_rnc_enforce_owner_price_settings.sql`, `20261116000800_rnc_customer_map_pin.sql`, and `20261116000900_rnc_limit_public_settings_columns.sql`.
 5. Verify the new tables exist: `user_roles`, `services`, `payment_methods`, `booking_price_quotes`, `booking_payments`, `expense_categories`, and `expenses`.
 6. Verify the new nullable/defaulted columns on `bookings` and `site_settings`.
 7. Verify the private Storage bucket `rnc-payment-proofs` exists, with a 5 MB limit and image/PDF MIME restrictions. The migration adds upload/read policies tied to booking ID, booking code, and phone number.
@@ -41,7 +41,7 @@ Do not guess the UUID. This step preserves the existing Auth account and passwor
 - Only the owner sees Website and Staff management tabs. Staff accounts are created through `POST /api/admin/staff`, which validates the caller with Supabase Auth and checks the active owner role server-side before using the service-role client.
 - Configure `SUPABASE_SERVICE_ROLE_KEY` as a server-only Vercel environment variable for the redesign deployment. Never prefix it with `NEXT_PUBLIC_`, commit it, or expose it in browser code.
 - The owner must first be bootstrapped manually using the SQL above. Staff passwords are created by the owner and should be shared securely and changed after first login.
-- Database policies now restrict website-setting writes and per-booking price-quote creation to owners; public settings reads remain available to the customer booking page and staff calendar. Staff retain operational booking/payment access and expense entry. The UI also hides owner-only price controls. Direct unauthorized API/RLS tests are still required in staging; hiding a UI tab is not a substitute for database RLS.
+- Database policies now restrict website-setting writes and per-booking price-quote creation to owners; anonymous customers can read only public presentation/schedule columns, while private owner settings (including the origin pin and automatic expense rules) remain unavailable to anonymous queries. Staff retain operational booking/payment access and expense entry. The UI also hides owner-only price controls. Direct unauthorized API/RLS tests are still required in staging; hiding a UI tab is not a substitute for database RLS.
 
 ## Payment workflow status
 
