@@ -50,7 +50,7 @@ create policy "rnc owner creates quotes"
   to authenticated
   with check (public.rnc_has_role(array['owner']));
 
-comment on policy "rnc owner only site settings" on public.site_settings is
+comment on policy "rnc owner only updates site settings" on public.site_settings is
   'Restrictive guard: staff cannot change owner-controlled website and booking settings.';
 comment on policy "rnc owner creates quotes" on public.booking_price_quotes is
   'Only owners may create or change per-booking price quotes.';
