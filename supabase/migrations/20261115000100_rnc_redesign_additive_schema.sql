@@ -219,7 +219,7 @@ as $$
   from public.bookings b
   join public.booking_price_quotes q on q.booking_id = b.id
   where b.id = p_booking_id
-    and regexp_replace(coalesce(b.phone, ''), '\\D', '', 'g') = regexp_replace(coalesce(p_phone, ''), '\\D', '', 'g')
+    and regexp_replace(coalesce(b.phone, ''), '[^0-9]', '', 'g') = regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g')
     and b.booking_code::text = trim(p_code)
   order by q.quoted_at desc
   limit 1;
@@ -246,7 +246,7 @@ begin
   if not exists (
     select 1 from public.bookings b
     where b.id = p_booking_id
-      and regexp_replace(coalesce(b.phone, ''), '\\D', '', 'g') = regexp_replace(coalesce(p_phone, ''), '\\D', '', 'g')
+      and regexp_replace(coalesce(b.phone, ''), '[^0-9]', '', 'g') = regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g')
       and b.booking_code::text = trim(p_code)
       and b.status = 'pending'
   ) then
