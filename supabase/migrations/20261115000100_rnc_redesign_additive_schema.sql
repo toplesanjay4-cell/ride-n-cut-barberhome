@@ -428,3 +428,33 @@ $$;
 
 revoke all on function public.customer_attach_payment_proof(text,text,uuid,text) from public;
 grant execute on function public.customer_attach_payment_proof(text,text,uuid,text) to anon, authenticated;
+
+
+create or replace function public.customer_booking_payment(
+  p_phone text,
+  p_code text,
+  p_booking_id uuid
+)
+returns table (
+  method_type text,
+  payment_status text,
+  has_proof boolean,
+  created_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select bp.method_type, bp.payment_status, (bp.proof_url is not null), bp.created_at
+  from public.bookings b
+  join public.booking_payments bp on bp.booking_id = b.id
+  where b.id = p_booking_id
+    and regexp_replace(coalesce(b.phone,''),'[^0-9]','','g') = regexp_replace(coalesce(p_phone,''),'[^0-9]','','g')
+    and b.booking_code::text = trim(p_code)
+  order by bp.created_at desc
+  limit 1;
+$$;
+
+revoke all on function public.customer_booking_payment(text,text,uuid) from public;
+grant execute on function public.customer_booking_payment(text,text,uuid) to anon, authenticated;
