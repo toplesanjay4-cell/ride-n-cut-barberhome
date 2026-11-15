@@ -283,3 +283,62 @@ revoke all on function public.customer_booking_quote(text,text,uuid) from public
 revoke all on function public.customer_approve_booking_quote(text,text,uuid,text) from public;
 grant execute on function public.customer_booking_quote(text,text,uuid) to anon, authenticated;
 grant execute on function public.customer_approve_booking_quote(text,text,uuid,text) to anon, authenticated;
+
+
+-- Customer can select a payment method only after approving the latest quote.
+create or replace function public.customer_select_booking_payment(
+  p_phone text,
+  p_code text,
+  p_booking_id uuid,
+  p_method text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_quote public.booking_price_quotes%rowtype;
+  v_payment_status text;
+begin
+  if p_method not in ('cash','bank_transfer','e_wallet','qris') then
+    return false;
+  end if;
+
+  if not exists (
+    select 1 from public.bookings b
+    where b.id = p_booking_id
+      and regexp_replace(coalesce(b.phone, ''), '[^0-9]', '', 'g') = regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g')
+      and b.booking_code::text = trim(p_code)
+      and b.status in ('pending','confirmed')
+  ) then
+    return false;
+  end if;
+
+  select * into v_quote
+  from public.booking_price_quotes q
+  where q.booking_id = p_booking_id
+  order by q.quoted_at desc
+  limit 1
+  for update;
+
+  if not found or v_quote.customer_approved_at is null then
+    return false;
+  end if;
+
+  v_payment_status := case when p_method = 'cash' then 'unpaid' else 'waiting_verification' end;
+
+  insert into public.booking_payments(booking_id, amount, method_type, payment_status)
+  values (p_booking_id, v_quote.total_price, p_method, v_payment_status);
+
+  update public.bookings
+  set payment_method = p_method,
+      payment_status = v_payment_status
+  where id = p_booking_id;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.customer_select_booking_payment(text,text,uuid,text) from public;
+grant execute on function public.customer_select_booking_payment(text,text,uuid,text) to anon, authenticated;
