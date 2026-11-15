@@ -187,6 +187,13 @@ create policy "rnc owner manages expenses" on public.expenses
   for all to authenticated using (public.rnc_has_role(array['owner']))
   with check (public.rnc_has_role(array['owner']));
 
+-- Staff may record and correct operational expenses, but only owners may delete them.
+create policy "rnc staff records expenses" on public.expenses
+  for insert to authenticated with check (public.rnc_has_role(array['owner','staff']));
+create policy "rnc staff updates expenses" on public.expenses
+  for update to authenticated using (public.rnc_has_role(array['owner','staff']))
+  with check (public.rnc_has_role(array['owner','staff']));
+
 create index if not exists booking_price_quotes_booking_id_idx on public.booking_price_quotes(booking_id, quoted_at desc);
 create index if not exists booking_payments_booking_id_idx on public.booking_payments(booking_id, created_at desc);
 create index if not exists expenses_expense_date_idx on public.expenses(expense_date desc);
