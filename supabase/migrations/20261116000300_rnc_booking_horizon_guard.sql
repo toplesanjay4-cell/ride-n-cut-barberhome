@@ -1,4 +1,4 @@
--- Resolve service duration on the database side, persist selected service details, and enforce the booking horizon server-side.
+-- Resolve service duration on the database side and persist selected service details.
 -- Remove the earlier public 8-argument overload so clients cannot bypass active service validation.
 drop function if exists public.customer_create_booking(text,text,text,uuid,timestamptz,text,text,integer);
 create or replace function public.customer_create_booking(
@@ -56,8 +56,8 @@ begin
     raise exception 'Durasi atau nama layanan tidak valid.';
   end if;
 
-  -- The browser's 14-day picker is only a convenience; enforce the same limit here.
-  -- Clamp misconfigured settings so public booking cannot be opened indefinitely.
+  -- The browser's date picker is only a convenience; enforce the limit in the database too.
+  -- Clamp the setting so public booking cannot be opened indefinitely by misconfiguration.
   select greatest(1, least(30, coalesce(ss.booking_horizon_days, 14)))
     into v_horizon_days
   from public.site_settings ss
