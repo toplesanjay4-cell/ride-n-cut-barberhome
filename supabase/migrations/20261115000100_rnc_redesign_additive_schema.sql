@@ -424,7 +424,7 @@ language plpgsql
 stable
 security definer
 set search_path = public
-as $
+as $rnc$
 declare
   v_parts text[];
 begin
@@ -703,7 +703,7 @@ grant execute on function public.customer_booking_payment(text,text,uuid) to ano
       and bp.method_type <> 'cash'
   );
 end;
-$;
+$rnc$;
 
 revoke all on function public.rnc_can_upload_payment_proof(text) from public;
 grant execute on function public.rnc_can_upload_payment_proof(text) to anon, authenticated;
