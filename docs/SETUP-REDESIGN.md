@@ -34,7 +34,15 @@ set role = 'owner', is_active = true, display_name = excluded.display_name;
 
 Do not guess the UUID. This step preserves the existing Auth account and password.
 
-## Owner and staff access\n\n- The admin UI checks the signed-in user against `user_roles`; accounts without an active role are denied dashboard access.\n- Only the owner sees Website and Staff management tabs. Staff accounts are created through `POST /api/admin/staff`, which validates the caller with Supabase Auth and checks the active owner role server-side before using the service-role client.\n- Configure `SUPABASE_SERVICE_ROLE_KEY` as a server-only Vercel environment variable for the redesign deployment. Never prefix it with `NEXT_PUBLIC_`, commit it, or expose it in browser code.\n- The owner must first be bootstrapped manually using the SQL above. Staff passwords are created by the owner and should be shared securely and changed after first login.\n- Staff access is still partial: verify every underlying table policy and test unauthorized requests in staging; hiding a UI tab is not a substitute for database RLS.\n\n## Payment workflow status
+## Owner and staff access
+
+- The admin UI checks the signed-in user against `user_roles`; accounts without an active role are denied dashboard access.
+- Only the owner sees Website and Staff management tabs. Staff accounts are created through `POST /api/admin/staff`, which validates the caller with Supabase Auth and checks the active owner role server-side before using the service-role client.
+- Configure `SUPABASE_SERVICE_ROLE_KEY` as a server-only Vercel environment variable for the redesign deployment. Never prefix it with `NEXT_PUBLIC_`, commit it, or expose it in browser code.
+- The owner must first be bootstrapped manually using the SQL above. Staff passwords are created by the owner and should be shared securely and changed after first login.
+- Staff access is still partial: verify every underlying table policy and test unauthorized requests in staging; hiding a UI tab is not a substitute for database RLS.
+
+## Payment workflow status
 
 - Customers can select cash, bank transfer, e-wallet, or QRIS after accepting the quote.
 - For non-cash payments, customers can upload a JPG, PNG, WEBP, or PDF proof (maximum 5 MB) to the private `rnc-payment-proofs` bucket.
