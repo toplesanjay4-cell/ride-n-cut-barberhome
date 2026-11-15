@@ -188,6 +188,8 @@ create policy "rnc owner manages expenses" on public.expenses
   with check (public.rnc_has_role(array['owner']));
 
 -- Staff may record and correct operational expenses, but only owners may delete them.
+create policy "rnc staff reads expenses" on public.expenses
+  for select to authenticated using (public.rnc_has_role(array['owner','staff']));
 create policy "rnc staff records expenses" on public.expenses
   for insert to authenticated with check (public.rnc_has_role(array['owner','staff']));
 create policy "rnc staff updates expenses" on public.expenses
