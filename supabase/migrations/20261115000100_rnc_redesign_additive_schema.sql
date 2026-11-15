@@ -192,3 +192,95 @@ create index if not exists booking_price_quotes_booking_id_idx on public.booking
 create index if not exists booking_payments_booking_id_idx on public.booking_payments(booking_id, created_at desc);
 create index if not exists expenses_expense_date_idx on public.expenses(expense_date desc);
 create index if not exists bookings_service_id_idx on public.bookings(service_id);
+
+
+-- Customer quote lookup: the phone + 5-digit booking code are both required.
+create or replace function public.customer_booking_quote(
+  p_phone text,
+  p_code text,
+  p_booking_id uuid
+)
+returns table (
+  quote_id uuid,
+  service_name text,
+  service_price numeric,
+  travel_fee numeric,
+  total_price numeric,
+  quoted_at timestamptz,
+  customer_approved_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select q.id, q.service_name, q.service_price, q.travel_fee,
+         q.total_price, q.quoted_at, q.customer_approved_at
+  from public.bookings b
+  join public.booking_price_quotes q on q.booking_id = b.id
+  where b.id = p_booking_id
+    and regexp_replace(coalesce(b.phone, ''), '\\D', '', 'g') = regexp_replace(coalesce(p_phone, ''), '\\D', '', 'g')
+    and b.booking_code::text = trim(p_code)
+  order by q.quoted_at desc
+  limit 1;
+$$;
+
+create or replace function public.customer_approve_booking_quote(
+  p_phone text,
+  p_code text,
+  p_booking_id uuid,
+  p_approval_channel text default 'website'
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_quote public.booking_price_quotes%rowtype;
+begin
+  if p_approval_channel not in ('website','whatsapp') then
+    return false;
+  end if;
+
+  if not exists (
+    select 1 from public.bookings b
+    where b.id = p_booking_id
+      and regexp_replace(coalesce(b.phone, ''), '\\D', '', 'g') = regexp_replace(coalesce(p_phone, ''), '\\D', '', 'g')
+      and b.booking_code::text = trim(p_code)
+      and b.status = 'pending'
+  ) then
+    return false;
+  end if;
+
+  select * into v_quote
+  from public.booking_price_quotes q
+  where q.booking_id = p_booking_id
+  order by q.quoted_at desc
+  limit 1
+  for update;
+
+  if not found or v_quote.customer_approved_at is not null then
+    return false;
+  end if;
+
+  update public.booking_price_quotes
+  set customer_approved_at = now(), approval_channel = p_approval_channel
+  where id = v_quote.id;
+
+  update public.bookings
+  set quoted_service_price = v_quote.service_price,
+      travel_fee = v_quote.travel_fee,
+      total_price = v_quote.total_price,
+      price_approved_at = now(),
+      price_approval_channel = p_approval_channel
+  where id = p_booking_id;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.customer_booking_quote(text,text,uuid) from public;
+revoke all on function public.customer_approve_booking_quote(text,text,uuid,text) from public;
+grant execute on function public.customer_booking_quote(text,text,uuid) to anon, authenticated;
+grant execute on function public.customer_approve_booking_quote(text,text,uuid,text) to anon, authenticated;
