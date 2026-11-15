@@ -14,7 +14,7 @@ This redesign is being developed on `redesign/ride-n-cut-overhaul`. Do not deplo
 1. Open the correct Supabase project for Ride N Cut.
 2. Create/download a database backup first.
 3. Open SQL Editor and run `supabase/migrations/20261115000100_rnc_redesign_additive_schema.sql`.
-4. Run the remaining migrations in filename order: `20261116000100_rnc_atomic_booking_slots.sql`, `20261116000200_rnc_service_duration_booking.sql`, `20261116000300_rnc_booking_horizon_guard.sql`, `20261116000400_rnc_lock_payment_writes.sql`, and `20261116000500_rnc_validate_payment_verification.sql`.
+4. Run the remaining migrations in filename order: `20261116000100_rnc_atomic_booking_slots.sql`, `20261116000200_rnc_service_duration_booking.sql`, `20261116000300_rnc_booking_horizon_guard.sql`, `20261116000400_rnc_lock_payment_writes.sql`, `20261116000500_rnc_validate_payment_verification.sql`, `20261116000600_rnc_lock_booking_during_payment_verify.sql`, `20261116000700_rnc_enforce_owner_price_settings.sql`, and `20261116000800_rnc_customer_map_pin.sql`.
 5. Verify the new tables exist: `user_roles`, `services`, `payment_methods`, `booking_price_quotes`, `booking_payments`, `expense_categories`, and `expenses`.
 6. Verify the new nullable/defaulted columns on `bookings` and `site_settings`.
 7. Verify the private Storage bucket `rnc-payment-proofs` exists, with a 5 MB limit and image/PDF MIME restrictions. The migration adds upload/read policies tied to booking ID, booking code, and phone number.
@@ -41,7 +41,7 @@ Do not guess the UUID. This step preserves the existing Auth account and passwor
 - Only the owner sees Website and Staff management tabs. Staff accounts are created through `POST /api/admin/staff`, which validates the caller with Supabase Auth and checks the active owner role server-side before using the service-role client.
 - Configure `SUPABASE_SERVICE_ROLE_KEY` as a server-only Vercel environment variable for the redesign deployment. Never prefix it with `NEXT_PUBLIC_`, commit it, or expose it in browser code.
 - The owner must first be bootstrapped manually using the SQL above. Staff passwords are created by the owner and should be shared securely and changed after first login.
-- Staff access is implemented in the admin UI and core additive-table policies, but still requires direct unauthorized API/RLS tests in staging; hiding a UI tab is not a substitute for database RLS.
+- Database policies now restrict website settings and per-booking price quotes to owners; staff retain operational booking/payment access and expense entry. The UI also hides owner-only price controls. Direct unauthorized API/RLS tests are still required in staging; hiding a UI tab is not a substitute for database RLS.
 
 ## Payment workflow status
 
@@ -55,9 +55,9 @@ Do not guess the UUID. This step preserves the existing Auth account and passwor
 
 ## Current implementation boundary
 
-The redesign branch now includes the customer booking flow, admin booking management, owner/staff role UI, service management, calendar day/week/month views, quote approval, payment method selection, private proof upload, manual payment verification, finance summaries, CSV/PDF exports, and booking analytics. The database checks barber-slot conflicts atomically, derives active service durations, enforces a configurable 1–30 day booking horizon (14 days by default), blocks direct client writes to payment records and quote approvals, and validates booking/payment state before staff can record receipt.
+The redesign branch now includes the customer booking flow, GPS/manual customer coordinate capture with an OpenStreetMap preview, an admin link to the saved customer pin, admin booking management, owner/staff role UI, service management, calendar day/week/month views, quote approval, payment method selection, private proof upload, manual payment verification, finance summaries, CSV/PDF exports, and booking analytics. The database checks barber-slot conflicts atomically, derives active service durations, enforces a configurable 1–30 day booking horizon (14 days by default), blocks direct client writes to payment records and quote approvals, restricts settings and price quotes to owners, and validates booking/payment state while locking both rows during payment verification.
 
-This is still a staging candidate, not a production release. Before merging or deploying, apply all migrations to a non-production Supabase project after taking a backup, verify the existing owner UUID, test owner/staff RLS directly, test booking/payment flows end-to-end, and confirm the Vercel environment variables. Interactive customer map-pin selection and route-distance estimation, automated off-site backups, abuse/rate limiting for public booking lookup, and a complete end-to-end test suite remain outstanding.
+This is still a staging candidate, not a production release. Before merging or deploying, apply all migrations to a non-production Supabase project after taking a backup, verify the existing owner UUID, test owner/staff RLS directly, test booking/payment flows end-to-end, and confirm the Vercel environment variables. Route-distance estimation, automated off-site backups, abuse/rate limiting for public booking lookup, and a complete end-to-end test suite remain outstanding. The current location feature captures browser GPS or manually entered coordinates; it is not a draggable map pin.
 
 ## Free map option
 
