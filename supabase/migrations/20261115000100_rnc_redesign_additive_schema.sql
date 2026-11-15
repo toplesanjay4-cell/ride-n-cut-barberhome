@@ -326,6 +326,10 @@ begin
     return false;
   end if;
 
+  if exists (select 1 from public.booking_payments bp where bp.booking_id = p_booking_id and bp.payment_status = 'paid') then
+    return false;
+  end if;
+
   v_payment_status := case when p_method = 'cash' then 'unpaid' else 'waiting_verification' end;
 
   if exists (select 1 from public.booking_payments bp where bp.booking_id = p_booking_id and bp.payment_status in ('unpaid','waiting_verification','rejected')) then
