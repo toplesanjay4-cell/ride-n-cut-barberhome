@@ -16,6 +16,7 @@ This redesign is being developed on `redesign/ride-n-cut-overhaul`. Do not deplo
 3. Open SQL Editor and run `supabase/migrations/20261115000100_rnc_redesign_additive_schema.sql`.
 4. Verify the new tables exist: `user_roles`, `services`, `payment_methods`, `booking_price_quotes`, `booking_payments`, `expense_categories`, and `expenses`.
 5. Verify the new nullable/defaulted columns on `bookings` and `site_settings`.
+6. Verify the private Storage bucket `rnc-payment-proofs` exists, with a 5 MB limit and image/PDF MIME restrictions. The migration adds upload/read policies tied to booking ID, booking code, and phone number.
 
 ## Bootstrap the owner role
 
@@ -32,6 +33,14 @@ set role = 'owner', is_active = true, display_name = excluded.display_name;
 ```
 
 Do not guess the UUID. This step preserves the existing Auth account and password.
+
+## Payment workflow status
+
+- Customers can select cash, bank transfer, e-wallet, or QRIS after accepting the quote.
+- For non-cash payments, customers can upload a JPG, PNG, WEBP, or PDF proof (maximum 5 MB) to the private `rnc-payment-proofs` bucket.
+- Admins can view the proof through a short-lived signed URL and manually verify receipt.
+- A transfer is not marked paid until an admin verifies it. Cash remains unpaid until the admin records receipt.
+- The current UI does not yet load payment method account details from the configurable `payment_methods` table; add and test those settings before public launch.
 
 ## Current implementation boundary
 
