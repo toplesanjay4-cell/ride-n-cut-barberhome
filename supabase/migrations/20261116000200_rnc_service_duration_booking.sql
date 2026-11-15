@@ -1,4 +1,6 @@
 -- Resolve service duration on the database side and persist selected service details.
+-- Remove the earlier public 8-argument overload so clients cannot bypass active service validation.
+drop function if exists public.customer_create_booking(text,text,text,uuid,timestamptz,text,text,integer);
 create or replace function public.customer_create_booking(
   p_customer_name text,
   p_phone text,
