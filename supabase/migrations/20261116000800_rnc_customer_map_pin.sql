@@ -46,18 +46,19 @@ begin
     raise exception 'Data booking tidak valid.';
   end if;
 
-  if p_service_id is not null then
-    select s.duration_minutes, s.name
-      into v_duration, v_service_name
-    from public.services s
-    where s.id = p_service_id and s.is_active = true;
+  -- Service identity and duration must come from the owner's active catalogue.
+  -- Never trust a public caller-supplied duration or service name.
+  if p_service_id is null then
+    raise exception 'Pilih layanan yang tersedia sebelum membuat booking.';
+  end if;
 
-    if not found then
-      raise exception 'Layanan tidak tersedia. Silakan pilih layanan lain.';
-    end if;
-  else
-    v_duration := coalesce(p_duration_minutes, 60);
-    v_service_name := coalesce(nullif(trim(p_service_name), ''), 'Personal Barber');
+  select s.duration_minutes, s.name
+    into v_duration, v_service_name
+  from public.services s
+  where s.id = p_service_id and s.is_active = true;
+
+  if not found then
+    raise exception 'Layanan tidak tersedia. Silakan pilih layanan lain.';
   end if;
 
   if v_duration not between 10 and 480 or length(v_service_name) > 120 then
