@@ -24,7 +24,6 @@ as $$
       and role = any(required_roles)
   );
 $;
-
 -- Limit helper execution to app roles; anon receives only a boolean role check.
 revoke all on function public.rnc_has_role(text[]) from public;
 grant execute on function public.rnc_has_role(text[]) to anon, authenticated;
