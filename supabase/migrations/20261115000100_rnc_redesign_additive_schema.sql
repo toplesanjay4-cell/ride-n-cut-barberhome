@@ -357,3 +357,74 @@ $$;
 
 revoke all on function public.customer_select_booking_payment(text,text,uuid,text) from public;
 grant execute on function public.customer_select_booking_payment(text,text,uuid,text) to anon, authenticated;
+
+
+-- Private payment-proof storage. Upload paths are tied to booking id, code and phone.
+insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
+values ('rnc-payment-proofs','rnc-payment-proofs',false,5242880,array['image/jpeg','image/png','image/webp','application/pdf'])
+on conflict (id) do update
+set public = false, file_size_limit = 5242880,
+    allowed_mime_types = array['image/jpeg','image/png','image/webp','application/pdf'];
+
+create policy "rnc customer uploads own payment proof"
+on storage.objects for insert to anon, authenticated
+with check (
+  bucket_id = 'rnc-payment-proofs'
+  and array_length(storage.foldername(name),1) = 3
+  and storage.foldername(name)[1] ~* '^[0-9a-f-]{36}$'
+  and exists (
+    select 1 from public.bookings b
+    where b.id::text = storage.foldername(name)[1]
+      and b.booking_code::text = storage.foldername(name)[2]
+      and regexp_replace(coalesce(b.phone,''),'[^0-9]','','g') = storage.foldername(name)[3]
+      and b.status in ('pending','confirmed')
+  )
+);
+
+create policy "rnc staff reads payment proofs"
+on storage.objects for select to authenticated
+using (bucket_id = 'rnc-payment-proofs' and public.rnc_has_role(array['owner','staff']));
+
+create or replace function public.customer_attach_payment_proof(
+  p_phone text,
+  p_code text,
+  p_booking_id uuid,
+  p_proof_path text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_proof_path is null or length(p_proof_path) > 500 then
+    return false;
+  end if;
+
+  if not exists (
+    select 1 from public.bookings b
+    join public.booking_payments bp on bp.booking_id = b.id
+    where b.id = p_booking_id
+      and regexp_replace(coalesce(b.phone,''),'[^0-9]','','g') = regexp_replace(coalesce(p_phone,''),'[^0-9]','','g')
+      and b.booking_code::text = trim(p_code)
+      and bp.payment_status = 'waiting_verification'
+      and bp.method_type <> 'cash'
+  ) then
+    return false;
+  end if;
+
+  update public.booking_payments
+  set proof_url = p_proof_path, updated_at = now()
+  where id = (
+    select bp.id from public.booking_payments bp
+    where bp.booking_id = p_booking_id and bp.payment_status = 'waiting_verification'
+    order by bp.created_at desc limit 1
+  );
+
+  update public.bookings set payment_proof_url = p_proof_path where id = p_booking_id;
+  return true;
+end;
+$$;
+
+revoke all on function public.customer_attach_payment_proof(text,text,uuid,text) from public;
+grant execute on function public.customer_attach_payment_proof(text,text,uuid,text) to anon, authenticated;
