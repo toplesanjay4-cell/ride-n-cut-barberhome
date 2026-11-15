@@ -328,8 +328,19 @@ begin
 
   v_payment_status := case when p_method = 'cash' then 'unpaid' else 'waiting_verification' end;
 
-  insert into public.booking_payments(booking_id, amount, method_type, payment_status)
-  values (p_booking_id, v_quote.total_price, p_method, v_payment_status);
+  if exists (select 1 from public.booking_payments bp where bp.booking_id = p_booking_id and bp.payment_status in ('unpaid','waiting_verification','rejected')) then
+    update public.booking_payments
+    set amount = v_quote.total_price, method_type = p_method,
+        payment_status = v_payment_status, updated_at = now()
+    where id = (
+      select bp.id from public.booking_payments bp
+      where bp.booking_id = p_booking_id and bp.payment_status in ('unpaid','waiting_verification','rejected')
+      order by bp.created_at desc limit 1
+    );
+  else
+    insert into public.booking_payments(booking_id, amount, method_type, payment_status)
+    values (p_booking_id, v_quote.total_price, p_method, v_payment_status);
+  end if;
 
   update public.bookings
   set payment_method = p_method,
