@@ -371,12 +371,12 @@ on storage.objects for insert to anon, authenticated
 with check (
   bucket_id = 'rnc-payment-proofs'
   and array_length(storage.foldername(name),1) = 3
-  and storage.foldername(name)[1] ~* '^[0-9a-f-]{36}$'
+  and (storage.foldername(name))[1] ~* '^[0-9a-f-]{36}$'
   and exists (
     select 1 from public.bookings b
-    where b.id::text = storage.foldername(name)[1]
-      and b.booking_code::text = storage.foldername(name)[2]
-      and regexp_replace(coalesce(b.phone,''),'[^0-9]','','g') = storage.foldername(name)[3]
+    where b.id::text = (storage.foldername(name))[1]
+      and b.booking_code::text = (storage.foldername(name))[2]
+      and regexp_replace(coalesce(b.phone,''),'[^0-9]','','g') = (storage.foldername(name))[3]
       and b.status in ('pending','confirmed')
   )
 );
