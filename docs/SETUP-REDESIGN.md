@@ -41,7 +41,7 @@ Do not guess the UUID. This step preserves the existing Auth account and passwor
 - Only the owner sees Website and Staff management tabs. Staff accounts are created through `POST /api/admin/staff`, which validates the caller with Supabase Auth and checks the active owner role server-side before using the service-role client.
 - Configure `SUPABASE_SERVICE_ROLE_KEY` as a server-only Vercel environment variable for the redesign deployment. Never prefix it with `NEXT_PUBLIC_`, commit it, or expose it in browser code.
 - The owner must first be bootstrapped manually using the SQL above. Staff passwords are created by the owner and should be shared securely and changed after first login.
-- Database policies now restrict website settings and per-booking price quotes to owners; staff retain operational booking/payment access and expense entry. The UI also hides owner-only price controls. Direct unauthorized API/RLS tests are still required in staging; hiding a UI tab is not a substitute for database RLS.
+- Database policies now restrict website-setting writes and per-booking price-quote creation to owners; public settings reads remain available to the customer booking page and staff calendar. Staff retain operational booking/payment access and expense entry. The UI also hides owner-only price controls. Direct unauthorized API/RLS tests are still required in staging; hiding a UI tab is not a substitute for database RLS.
 
 ## Payment workflow status
 
