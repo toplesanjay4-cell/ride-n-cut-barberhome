@@ -23,7 +23,11 @@ as $$
       and is_active = true
       and role = any(required_roles)
   );
-$$;
+$;
+
+-- Limit helper execution to app roles; anon receives only a boolean role check.
+revoke all on function public.rnc_has_role(text[]) from public;
+grant execute on function public.rnc_has_role(text[]) to anon, authenticated;
 
 create table if not exists public.services (
   id uuid primary key default gen_random_uuid(),
