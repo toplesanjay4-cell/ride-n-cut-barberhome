@@ -365,7 +365,7 @@ returns boolean
 language plpgsql
 security definer
 set search_path = public
-as $
+as $rnc$
 declare
   v_booking_id uuid;
   v_method text;
@@ -403,7 +403,7 @@ begin
 
   return true;
 end;
-$;
+$rnc$;
 
 revoke all on function public.rnc_admin_verify_booking_payment(uuid) from public;
 grant execute on function public.rnc_admin_verify_booking_payment(uuid) to authenticated;
