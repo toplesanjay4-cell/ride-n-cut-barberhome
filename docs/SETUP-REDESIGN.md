@@ -44,7 +44,7 @@ Do not guess the UUID. This step preserves the existing Auth account and passwor
 
 ## Current implementation boundary
 
-The schema is groundwork, not a completed feature. It does not by itself provide the full owner/staff UI, price approval screens, payment proof storage, map routing, calendar conflict logic, or scheduled backups. Those require application code, storage bucket policies, and deployment configuration. Do not announce these features as live until tested.
+The quote approval and payment UI is now partially implemented on the redesign branch: admin quote entry, customer approval, payment method selection, private proof upload, and manual payment verification. It is not production-ready until the SQL migration is reviewed/applied in a non-production Supabase project and end-to-end tests pass. Full owner/staff UI and role enforcement, map routing and distance fees, calendar conflict logic with service durations/buffers, finance reporting, configurable payment account details, and scheduled backups are still incomplete.
 
 ## Free map option
 
