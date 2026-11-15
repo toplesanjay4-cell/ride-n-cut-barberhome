@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Clock3, MapPin, Scissors, ShieldCheck, Search, XCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-type Barber = { id: string; name: string };\ntype PublicService={id:string;name:string;description:string|null;duration_minutes:number};
+type Barber = { id: string; name: string };
+type PublicService={id:string;name:string;description:string|null;duration_minutes:number};
 type CustomerBooking={id:string;customer_name:string;start_at:string;status:string;notes:string|null;barber_name:string|null};
 type CustomerQuote={quote_id:string;service_name:string;service_price:number;travel_fee:number;total_price:number;quoted_at:string;customer_approved_at:string|null};
 type CustomerPayment={method_type:string;payment_status:string;has_proof:boolean;created_at:string};
