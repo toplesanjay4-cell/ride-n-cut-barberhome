@@ -359,6 +359,56 @@ revoke all on function public.customer_select_booking_payment(text,text,uuid,tex
 grant execute on function public.customer_select_booking_payment(text,text,uuid,text) to anon, authenticated;
 
 
+-- Atomic payment verification: prevent payment and booking status from diverging.
+create or replace function public.rnc_admin_verify_booking_payment(p_payment_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  v_booking_id uuid;
+  v_method text;
+  v_status text;
+  v_proof text;
+begin
+  if not public.rnc_has_role(array['owner','staff']) then
+    return false;
+  end if;
+
+  select booking_id, method_type, payment_status, proof_url
+    into v_booking_id, v_method, v_status, v_proof
+  from public.booking_payments
+  where id = p_payment_id
+  for update;
+
+  if not found or v_status = 'paid' then
+    return false;
+  end if;
+
+  if v_method <> 'cash' and v_proof is null then
+    return false;
+  end if;
+
+  update public.booking_payments
+  set payment_status = 'paid',
+      received_at = now(),
+      verified_by = auth.uid(),
+      updated_at = now()
+  where id = p_payment_id;
+
+  update public.bookings
+  set payment_status = 'paid'
+  where id = v_booking_id;
+
+  return true;
+end;
+$;
+
+revoke all on function public.rnc_admin_verify_booking_payment(uuid) from public;
+grant execute on function public.rnc_admin_verify_booking_payment(uuid) to authenticated;
+
+
 -- Private payment-proof storage. Upload paths are tied to booking id, code and phone.
 insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
 values ('rnc-payment-proofs','rnc-payment-proofs',false,5242880,array['image/jpeg','image/png','image/webp','application/pdf'])
