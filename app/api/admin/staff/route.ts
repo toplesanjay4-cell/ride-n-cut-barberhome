@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Hanya owner aktif yang dapat membuat akun staff." }, { status: 403 });
   }
 
-  if (!(request.headers.get("content-type") || "").toLowerCase().includes("application/json")) {
+  const contentType = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (contentType !== "application/json") {
     return NextResponse.json({ error: "Content-Type harus application/json." }, { status: 415 });
   }
 
@@ -90,8 +91,12 @@ export async function POST(request: NextRequest) {
   });
 
   if (roleInsertError) {
-    await admin.auth.admin.deleteUser(created.user.id);
-    return NextResponse.json({ error: "Peran staff gagal disimpan. Akun sementara sudah dibatalkan; coba lagi atau hubungi administrator." }, { status: 500 });
+    const { error: cleanupError } = await admin.auth.admin.deleteUser(created.user.id);
+    if (cleanupError) {
+      console.error("Ride N Cut staff provisioning rollback failed.");
+      return NextResponse.json({ error: "Pembuatan akun belum selesai dan perlu ditangani administrator. Jangan membuat akun staff ulang sebelum diperiksa." }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Peran staff gagal disimpan. Akun sementara sudah dibatalkan; coba lagi." }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, user_id: created.user.id });
