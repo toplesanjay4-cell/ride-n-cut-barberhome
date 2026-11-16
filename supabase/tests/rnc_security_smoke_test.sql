@@ -16,6 +16,41 @@ begin
     raise exception 'FAIL: public.user_roles must have RLS enabled';
   end if;
 
+  -- Raw booking rows must be private to active owner/staff accounts.
+  select c.relrowsecurity into v_enabled
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relname = 'bookings';
+  if coalesce(v_enabled, false) is not true then
+    raise exception 'FAIL: public.bookings must have RLS enabled';
+  end if;
+
+  if has_table_privilege('anon', 'public.bookings', 'SELECT')
+     or has_table_privilege('anon', 'public.bookings', 'INSERT')
+     or has_table_privilege('anon', 'public.bookings', 'UPDATE')
+     or has_table_privilege('anon', 'public.bookings', 'DELETE')
+     or has_table_privilege('authenticated', 'public.bookings', 'INSERT')
+     or has_table_privilege('authenticated', 'public.bookings', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.bookings', 'DELETE')
+     or not has_table_privilege('authenticated', 'public.bookings', 'SELECT') then
+    raise exception 'FAIL: direct booking table privileges are broader or narrower than the admin read-only model';
+  end if;
+
+  select count(*) into v_policy_count
+  from pg_policies
+  where schemaname = 'public'
+    and tablename = 'bookings'
+    and cmd = 'SELECT'
+    and coalesce(qual, '') ilike '%rnc_has_role%owner%staff%'
+    and (
+      (policyname = 'rnc active admins read bookings' and permissive = 'PERMISSIVE')
+      or
+      (policyname = 'rnc active admins restrict booking reads' and permissive = 'RESTRICTIVE')
+    );
+  if v_policy_count <> 2 then
+    raise exception 'FAIL: active owner/staff booking read policies are missing or invalid';
+  end if;
+
   -- The old all-actions owner policy must not survive the hardening migration.
   select count(*) into v_policy_count
   from pg_policies
@@ -126,7 +161,8 @@ begin
      or to_regprocedure('public.rnc_admin_mark_payment_refunded(uuid)') is null
      or to_regprocedure('public.rnc_can_upload_payment_proof(text)') is null
      or to_regprocedure('public.rnc_guard_booking_schedule_update()') is null
-     or to_regprocedure('public.rnc_guard_booking_state_update()') is null then
+     or to_regprocedure('public.rnc_guard_booking_state_update()') is null
+     or to_regprocedure('public.customer_booking_slots(uuid,date)') is null then
     raise exception 'FAIL: one or more validated admin RPCs are missing';
   end if;
 
@@ -175,6 +211,19 @@ begin
      or position('payment_status' in lower(pg_get_functiondef('public.rnc_guard_booking_state_update()'::regprocedure))) = 0
      or position('cancellation_status' in lower(pg_get_functiondef('public.rnc_guard_booking_state_update()'::regprocedure))) = 0 then
     raise exception 'FAIL: booking state guard does not protect sensitive columns as an invoker trigger';
+  end if;
+
+  -- The public availability RPC must expose only occupied intervals, not customer data.
+  select p.prosecdef into v_enabled
+  from pg_proc p
+  where p.oid = 'public.customer_booking_slots(uuid,date)'::regprocedure;
+  if coalesce(v_enabled, false) is not true
+     or position('start_at' in lower(pg_get_functiondef('public.customer_booking_slots(uuid,date)'::regprocedure))) = 0
+     or position('service_duration_minutes' in lower(pg_get_functiondef('public.customer_booking_slots(uuid,date)'::regprocedure))) = 0
+     or position('customer_name' in lower(pg_get_functiondef('public.customer_booking_slots(uuid,date)'::regprocedure))) > 0
+     or position('phone' in lower(pg_get_functiondef('public.customer_booking_slots(uuid,date)'::regprocedure))) > 0
+     or position('address' in lower(pg_get_functiondef('public.customer_booking_slots(uuid,date)'::regprocedure))) > 0 then
+    raise exception 'FAIL: public booking availability RPC is not a minimal, private-data-safe function';
   end if;
 
   raise notice 'PASS: Ride N Cut security smoke checks passed. This does not replace role-based integration tests.';
