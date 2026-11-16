@@ -9,7 +9,7 @@ const files = (await readdir(migrationDir))
 const expected = [
   "20261115000100_rnc_redesign_additive_schema.sql",
   ...Array.from({ length: 18 }, (_, index) => {
-    const number = String(index + 1).padStart(3, "0");
+    const number = String(index + 1).padStart(4, "0");
     const titles = [
       "rnc_atomic_booking_slots",
       "rnc_service_duration_booking",
