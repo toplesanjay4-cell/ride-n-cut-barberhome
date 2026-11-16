@@ -122,8 +122,15 @@ begin
 
   if to_regprocedure('public.rnc_admin_set_booking_status(uuid,text)') is null
      or to_regprocedure('public.rnc_admin_verify_booking_payment(uuid)') is null
-     or to_regprocedure('public.rnc_admin_update_booking(uuid,text,text,text,uuid,timestamp with time zone,text,text)') is null then
+     or to_regprocedure('public.rnc_admin_update_booking(uuid,text,text,text,uuid,timestamp with time zone,text,text)') is null
+     or to_regprocedure('public.rnc_admin_mark_payment_refunded(uuid)') is null then
     raise exception 'FAIL: one or more validated admin RPCs are missing';
+  end if;
+
+  -- Paid bookings must be refunded before an admin can approve cancellation.
+  if position('v_payment_status = ''paid''' in pg_get_functiondef('public.rnc_admin_review_booking_cancellation(uuid,text)'::regprocedure)) = 0
+     or position('v_payment_status = ''paid''' in pg_get_functiondef('public.rnc_admin_set_booking_status(uuid,text)'::regprocedure)) = 0 then
+    raise exception 'FAIL: cancellation paths do not block unrefunded paid bookings';
   end if;
 
   raise notice 'PASS: Ride N Cut security smoke checks passed. This does not replace role-based integration tests.';
