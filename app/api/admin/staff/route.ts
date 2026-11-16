@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  if (!name || name.length > 100 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 128) {
+  if (!name || name.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 128) {
     return NextResponse.json({ error: "Periksa nama, email, dan password (8–128 karakter)." }, { status: 400 });
   }
 
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     user_metadata: { display_name: name, created_for: "ride-n-cut-staff" }
   });
   if (createError || !created.user) {
-    return NextResponse.json({ error: createError?.message || "Akun staff gagal dibuat." }, { status: 400 });
+    return NextResponse.json({ error: "Akun staff gagal dibuat. Periksa email dan coba lagi." }, { status: 400 });
   }
 
   const { error: roleInsertError } = await admin.from("user_roles").insert({
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
   if (roleInsertError) {
     await admin.auth.admin.deleteUser(created.user.id);
-    return NextResponse.json({ error: "Peran staff gagal disimpan; akun sementara sudah dibatalkan. " + roleInsertError.message }, { status: 500 });
+    return NextResponse.json({ error: "Peran staff gagal disimpan. Akun sementara sudah dibatalkan; coba lagi atau hubungi administrator." }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, user_id: created.user.id });
