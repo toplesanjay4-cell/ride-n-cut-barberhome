@@ -123,7 +123,9 @@ begin
   if to_regprocedure('public.rnc_admin_set_booking_status(uuid,text)') is null
      or to_regprocedure('public.rnc_admin_verify_booking_payment(uuid)') is null
      or to_regprocedure('public.rnc_admin_update_booking(uuid,text,text,text,uuid,timestamp with time zone,text,text)') is null
-     or to_regprocedure('public.rnc_admin_mark_payment_refunded(uuid)') is null then
+     or to_regprocedure('public.rnc_admin_mark_payment_refunded(uuid)') is null
+     or to_regprocedure('public.rnc_can_upload_payment_proof(text)') is null
+     or to_regprocedure('public.rnc_guard_booking_schedule_update()') is null then
     raise exception 'FAIL: one or more validated admin RPCs are missing';
   end if;
 
@@ -138,6 +140,17 @@ begin
      or position('v_cancellation_status = ''requested''' in pg_get_functiondef('public.customer_attach_payment_proof(text,text,uuid,text)'::regprocedure)) = 0
      or position('v_cancellation_status = ''requested''' in pg_get_functiondef('public.rnc_admin_verify_booking_payment(uuid)'::regprocedure)) = 0 then
     raise exception 'FAIL: paid cancellation/refund guards are missing';
+  end if;
+
+  -- Cancellation review must freeze uploads, rescheduling, and generic status changes.
+  if position('cancellation_status' in lower(pg_get_functiondef('public.rnc_can_upload_payment_proof(text)'::regprocedure))) = 0
+     or position('requested' in lower(pg_get_functiondef('public.rnc_can_upload_payment_proof(text)'::regprocedure))) = 0
+     or position('order by bp_latest.created_at desc' in lower(pg_get_functiondef('public.rnc_can_upload_payment_proof(text)'::regprocedure))) = 0
+     or position('v_cancellation_status' in lower(pg_get_functiondef('public.rnc_admin_set_booking_status(uuid,text)'::regprocedure))) = 0
+     or position('old.cancellation_status' in lower(pg_get_functiondef('public.rnc_guard_booking_schedule_update()'::regprocedure))) = 0
+     or position('v_payment_status = ''refunded''' in lower(pg_get_functiondef('public.rnc_admin_review_booking_cancellation(uuid,text)'::regprocedure))) = 0
+     or position('order by bp_latest.created_at desc' in lower(pg_get_functiondef('public.rnc_admin_mark_payment_refunded(uuid)'::regprocedure))) = 0 then
+    raise exception 'FAIL: cancellation transition, proof upload, reschedule, or refund guards are incomplete';
   end if;
 
   raise notice 'PASS: Ride N Cut security smoke checks passed. This does not replace role-based integration tests.';
