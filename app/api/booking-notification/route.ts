@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     phoneDigits.length < 8 || phoneDigits.length > 16 ||
     !address || address.length > 1000 ||
     !barberName || barberName.length > 100 ||
-    !/^\\d{5}$/.test(bookingCode) ||
+    !/^\d{5}$/.test(bookingCode) ||
     !Number.isFinite(startAt.getTime()) ||
     notes.length > 1000
   ) {
