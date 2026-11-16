@@ -13,27 +13,41 @@ as $rnc$
 declare
   v_booking_id uuid;
   v_payment_status text;
+  v_booking_status text;
+  v_cancellation_status text;
 begin
   if auth.uid() is null or not public.rnc_has_role(array['owner','staff']) then
     return false;
   end if;
 
-  select bp.booking_id, bp.payment_status
-    into v_booking_id, v_payment_status
+  -- Use the same lock order as payment verification: booking, then payment.
+  select bp.booking_id into v_booking_id
   from public.booking_payments bp
-  where bp.id = p_payment_id
-  for update;
+  where bp.id = p_payment_id;
 
-  if not found or v_payment_status <> 'paid' then
+  if not found then
     return false;
   end if;
 
-  perform 1
+  select b.status, b.cancellation_status
+    into v_booking_status, v_cancellation_status
   from public.bookings b
   where b.id = v_booking_id
   for update;
 
-  if not found then
+  if not found
+     or v_booking_status not in ('pending','confirmed')
+     or v_cancellation_status <> 'requested' then
+    return false;
+  end if;
+
+  select bp.payment_status into v_payment_status
+  from public.booking_payments bp
+  where bp.id = p_payment_id
+    and bp.booking_id = v_booking_id
+  for update;
+
+  if not found or v_payment_status <> 'paid' then
     return false;
   end if;
 
