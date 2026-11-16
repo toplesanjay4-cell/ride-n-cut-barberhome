@@ -22,5 +22,7 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Check migration integrity
+        run: npm run check:migrations
       - name: Build Next.js
         run: npm run build
