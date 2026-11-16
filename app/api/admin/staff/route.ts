@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
+const MAX_BODY_BYTES = 8_000;
+
 export async function POST(request: NextRequest) {
   const authorization = request.headers.get("authorization") || "";
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
@@ -33,17 +35,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Hanya owner aktif yang dapat membuat akun staff." }, { status: 403 });
   }
 
-  let body: { name?: string; email?: string; password?: string };
+  if (!(request.headers.get("content-type") || "").toLowerCase().includes("application/json")) {
+    return NextResponse.json({ error: "Content-Type harus application/json." }, { status: 415 });
+  }
+
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "Data permintaan terlalu besar." }, { status: 413 });
+  }
+
+  let rawBody: string;
   try {
-    body = await request.json();
+    rawBody = await request.text();
+  } catch {
+    return NextResponse.json({ error: "Data permintaan tidak dapat dibaca." }, { status: 400 });
+  }
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "Data permintaan terlalu besar." }, { status: 413 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(rawBody);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Data permintaan tidak valid." }, { status: 400 });
+    }
+    body = parsed as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Data permintaan tidak valid." }, { status: 400 });
   }
 
-  const name = String(body.name || "").trim();
-  const email = String(body.email || "").trim().toLowerCase();
-  const password = String(body.password || "");
-  if (!name || name.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 128) {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  if (!name || name.length > 100 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254 || password.length < 8 || password.length > 128) {
     return NextResponse.json({ error: "Periksa nama, email, dan password (8–128 karakter)." }, { status: 400 });
   }
 
