@@ -13,20 +13,35 @@ declare
   v_proof text;
   v_booking_status text;
 begin
-  if not public.rnc_has_role(array['owner','staff']) then
+  if auth.uid() is null or not public.rnc_has_role(array['owner','staff']) then
     return false;
   end if;
 
-  select bp.booking_id, bp.method_type, bp.payment_status, bp.proof_url, b.status
-    into v_booking_id, v_method, v_status, v_proof, v_booking_status
+  select bp.booking_id into v_booking_id
   from public.booking_payments bp
-  join public.bookings b on b.id = bp.booking_id
-  where bp.id = p_payment_id
-  for update of bp, b;
+  where bp.id = p_payment_id;
 
-  if not found
-     or lower(coalesce(v_booking_status, '')) in ('cancelled', 'canceled')
-     or v_status = 'paid' then
+  if not found then
+    return false;
+  end if;
+
+  -- Always lock booking first, then payment, matching customer and refund RPCs.
+  select b.status into v_booking_status
+  from public.bookings b
+  where b.id = v_booking_id
+  for update;
+
+  if not found or lower(coalesce(v_booking_status, '')) in ('cancelled', 'canceled') then
+    return false;
+  end if;
+
+  select bp.method_type, bp.payment_status, bp.proof_url
+    into v_method, v_status, v_proof
+  from public.booking_payments bp
+  where bp.id = p_payment_id and bp.booking_id = v_booking_id
+  for update;
+
+  if not found or v_status = 'paid' or v_status = 'refunded' then
     return false;
   end if;
 
