@@ -247,6 +247,40 @@ begin
     raise exception 'FAIL: validated booking/payment RPCs must be SECURITY DEFINER functions owned by postgres';
   end if;
 
+  -- Customer-facing SECURITY DEFINER RPCs must be callable by anon,
+  -- while admin mutation RPCs must never be executable by anon.
+  select count(*) into v_policy_count
+  from unnest(array[
+    'public.customer_create_booking(text,text,text,uuid,timestamp with time zone,text,text,integer,uuid,text,double precision,double precision)'::regprocedure,
+    'public.customer_booking_quote(text,text,uuid)'::regprocedure,
+    'public.customer_approve_booking_quote(text,text,uuid,text)'::regprocedure,
+    'public.customer_select_booking_payment(text,text,uuid,text)'::regprocedure,
+    'public.customer_attach_payment_proof(text,text,uuid,text)'::regprocedure,
+    'public.customer_booking_payment(text,text,uuid)'::regprocedure,
+    'public.customer_request_booking_cancellation(text,text,uuid)'::regprocedure,
+    'public.customer_booking_cancellation_status(text,text,uuid)'::regprocedure,
+    'public.customer_booking_slots(uuid,date)'::regprocedure
+  ]) as customer_functions(function_oid)
+  where has_function_privilege('anon', customer_functions.function_oid, 'EXECUTE')
+    and has_function_privilege('authenticated', customer_functions.function_oid, 'EXECUTE');
+  if v_policy_count <> 9 then
+    raise exception 'FAIL: customer RPC execute grants are missing or inconsistent for anon/authenticated';
+  end if;
+
+  select count(*) into v_policy_count
+  from unnest(array[
+    'public.rnc_admin_set_booking_status(uuid,text)'::regprocedure,
+    'public.rnc_admin_verify_booking_payment(uuid)'::regprocedure,
+    'public.rnc_admin_update_booking(uuid,text,text,text,uuid,timestamp with time zone,text,text)'::regprocedure,
+    'public.rnc_admin_mark_payment_refunded(uuid)'::regprocedure,
+    'public.rnc_admin_review_booking_cancellation(uuid,text)'::regprocedure
+  ]) as admin_functions(function_oid)
+  where not has_function_privilege('anon', admin_functions.function_oid, 'EXECUTE')
+    and has_function_privilege('authenticated', admin_functions.function_oid, 'EXECUTE');
+  if v_policy_count <> 5 then
+    raise exception 'FAIL: admin mutation RPCs must be unavailable to anon and executable by authenticated users';
+  end if;
+
   raise notice 'PASS: Ride N Cut security smoke checks passed. This does not replace role-based integration tests.';
 end
 $rnc_test$;
