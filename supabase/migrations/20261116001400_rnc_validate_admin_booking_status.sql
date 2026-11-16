@@ -53,7 +53,7 @@ begin
       return false;
     end if;
   elsif p_status = 'cancelled' then
-    if v_current_status not in ('pending','confirmed') then
+    if v_current_status not in ('pending','confirmed') or v_payment_status = 'paid' then
       return false;
     end if;
   end if;
