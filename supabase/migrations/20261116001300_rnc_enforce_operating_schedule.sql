@@ -128,7 +128,7 @@ begin
   end if;
 
   if (v_local_start::time < v_open_time)
-     or (v_local_start::time + make_interval(mins => v_duration) > v_close_time) then
+     or (v_local_start + make_interval(mins => v_duration) > v_local_start::date + v_close_time) then
     raise exception 'Waktu booking harus berada dalam jam operasional.';
   end if;
 
