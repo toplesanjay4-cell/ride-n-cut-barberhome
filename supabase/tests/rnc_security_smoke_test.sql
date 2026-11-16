@@ -125,7 +125,8 @@ begin
      or to_regprocedure('public.rnc_admin_update_booking(uuid,text,text,text,uuid,timestamp with time zone,text,text)') is null
      or to_regprocedure('public.rnc_admin_mark_payment_refunded(uuid)') is null
      or to_regprocedure('public.rnc_can_upload_payment_proof(text)') is null
-     or to_regprocedure('public.rnc_guard_booking_schedule_update()') is null then
+     or to_regprocedure('public.rnc_guard_booking_schedule_update()') is null
+     or to_regprocedure('public.rnc_guard_booking_state_update()') is null then
     raise exception 'FAIL: one or more validated admin RPCs are missing';
   end if;
 
@@ -151,6 +152,29 @@ begin
      or position('v_payment_status = ''refunded''' in lower(pg_get_functiondef('public.rnc_admin_review_booking_cancellation(uuid,text)'::regprocedure))) = 0
      or position('order by bp_latest.created_at desc' in lower(pg_get_functiondef('public.rnc_admin_mark_payment_refunded(uuid)'::regprocedure))) = 0 then
     raise exception 'FAIL: cancellation transition, proof upload, reschedule, or refund guards are incomplete';
+  end if;
+
+  -- Protected booking state must not be writable directly through PostgREST.
+  if not exists (
+    select 1
+    from pg_trigger t
+    where t.tgrelid = 'public.bookings'::regclass
+      and t.tgname = 'rnc_guard_booking_state_update'
+      and not t.tgisinternal
+      and t.tgenabled in ('O','A')
+  ) then
+    raise exception 'FAIL: booking state guard trigger is missing or disabled';
+  end if;
+
+  select p.prosecdef into v_enabled
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'rnc_guard_booking_state_update';
+  if coalesce(v_enabled, true) is not false
+     or position('current_user' in lower(pg_get_functiondef('public.rnc_guard_booking_state_update()'::regprocedure))) = 0
+     or position('payment_status' in lower(pg_get_functiondef('public.rnc_guard_booking_state_update()'::regprocedure))) = 0
+     or position('cancellation_status' in lower(pg_get_functiondef('public.rnc_guard_booking_state_update()'::regprocedure))) = 0 then
+    raise exception 'FAIL: booking state guard does not protect sensitive columns as an invoker trigger';
   end if;
 
   raise notice 'PASS: Ride N Cut security smoke checks passed. This does not replace role-based integration tests.';
