@@ -17,8 +17,8 @@ declare
   v_status text;
   v_cancel_status text;
 begin
-  select b.status, b.cancellation_status
-    into v_status, v_cancel_status
+  select b.status, b.cancellation_status, b.payment_status
+    into v_status, v_cancel_status, v_payment_status
   from public.bookings b
   where b.id = p_booking_id
     and regexp_replace(coalesce(b.phone,''),'[^0-9]','','g') = regexp_replace(coalesce(p_phone,''),'[^0-9]','','g')
@@ -57,6 +57,7 @@ as $rnc$
 declare
   v_status text;
   v_cancel_status text;
+  v_payment_status text;
 begin
   if auth.uid() is null
      or not public.rnc_has_role(array['owner','staff'])
@@ -73,7 +74,8 @@ begin
 
   if not found
      or v_status not in ('pending','confirmed')
-     or v_cancel_status <> 'requested' then
+     or v_cancel_status <> 'requested'
+     or (p_decision = 'approved' and v_payment_status = 'paid') then
     return false;
   end if;
 
