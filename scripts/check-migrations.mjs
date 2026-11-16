@@ -73,6 +73,7 @@ for (const marker of [
   "rnc_guard_booking_schedule_update",
   "rnc_guard_booking_state_update",
   "customer_booking_slots",
+  "validated booking/payment RPCs must be SECURITY DEFINER functions owned by postgres",
   "cancellation transition, proof upload, reschedule, or refund guards",
 ]) {
   if (!smoke.includes(marker)) errors.push(`Security smoke test is missing check: ${marker}`);
