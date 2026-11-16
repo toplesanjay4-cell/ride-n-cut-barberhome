@@ -78,15 +78,35 @@ begin
     raise exception 'FAIL: private site_settings columns are exposed to anon';
   end if;
 
-  -- Service-only price control: staff UPDATE policy must be absent.
+  -- Service-only price control: staff cannot create or edit customer quotes.
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'booking_price_quotes'
+      and policyname in ('rnc staff creates quotes', 'rnc staff updates quotes')
+  ) then
+    raise exception 'FAIL: a staff quote write policy remains';
+  end if;
   select count(*) into v_policy_count
   from pg_policies
   where schemaname = 'public'
     and tablename = 'booking_price_quotes'
+    and policyname = 'rnc owner creates quotes'
+    and cmd = 'INSERT'
+    and coalesce(with_check, '') ilike '%rnc_has_role%owner%';
+  if v_policy_count <> 1 then
+    raise exception 'FAIL: owner-only quote INSERT policy is missing or invalid';
+  end if;
+  select count(*) into v_policy_count
+  from pg_policies
+  where schemaname = 'public'
+    and tablename = 'booking_price_quotes'
+    and policyname = 'rnc owner updates quotes'
     and cmd = 'UPDATE'
-    and coalesce(qual, '') ilike '%staff%';
-  if v_policy_count <> 0 then
-    raise exception 'FAIL: a staff quote UPDATE policy remains';
+    and coalesce(qual, '') ilike '%rnc_has_role%owner%'
+    and coalesce(with_check, '') ilike '%rnc_has_role%owner%';
+  if v_policy_count <> 1 then
+    raise exception 'FAIL: owner-only quote UPDATE policy is missing or invalid';
   end if;
 
   -- Private proof storage must remain private and staff-readable only.
