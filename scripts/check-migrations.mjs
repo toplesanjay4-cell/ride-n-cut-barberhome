@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 const migrationDir = join(process.cwd(), "supabase", "migrations");
 const files = (await readdir(migrationDir))
-  .filter((name) => /^2026\\d{10}_.+\\.sql$/.test(name))
+  .filter((name) => /^2026\d{10}_.+\.sql$/.test(name))
   .sort();
 
 const expected = [
