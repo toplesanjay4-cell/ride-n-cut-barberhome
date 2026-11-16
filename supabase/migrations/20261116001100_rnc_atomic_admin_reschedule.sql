@@ -47,6 +47,10 @@ begin
     raise exception 'Booking tidak ditemukan.';
   end if;
 
+  if p_status is distinct from v_booking.status then
+    raise exception 'Ubah status booking harus melalui transisi status tervalidasi.';
+  end if;
+
   if lower(coalesce(v_booking.status, '')) in ('cancelled','canceled','completed') then
     raise exception 'Booking yang sudah selesai atau dibatalkan tidak dapat diedit.';
   end if;
@@ -91,8 +95,7 @@ begin
       address = trim(p_address),
       barber_id = p_barber_id,
       start_at = p_start_at,
-      notes = nullif(trim(coalesce(p_notes, '')), ''),
-      status = p_status
+      notes = nullif(trim(coalesce(p_notes, '')), '')
   where id = p_booking_id;
 
   return true;
