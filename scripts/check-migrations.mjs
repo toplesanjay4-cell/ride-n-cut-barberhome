@@ -55,6 +55,8 @@ for (const marker of [
   "rnc owner creates staff roles",
   "rnc owner updates staff roles",
   "rnc owner deletes staff roles",
+  "rnc owner creates quotes",
+  "rnc owner updates quotes",
   "booking_payments",
   "booking_buffer_minutes",
   "rnc-payment-proofs",
