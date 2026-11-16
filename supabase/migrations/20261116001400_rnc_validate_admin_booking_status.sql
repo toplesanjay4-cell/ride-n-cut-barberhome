@@ -18,7 +18,7 @@ begin
     return false;
   end if;
 
-  if p_status not in ('confirmed','cancelled','completed') then
+  if p_status is null or p_status not in ('confirmed','cancelled','completed') then
     return false;
   end if;
 
