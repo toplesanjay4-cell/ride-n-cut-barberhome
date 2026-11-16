@@ -6,12 +6,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "EmailJS belum dikonfigurasi di server." }, { status: 503 });
   }
 
-  const body = await request.json().catch(() => null);
-  if (!body || !body.customer_name || !body.phone || !body.address || !body.start_at || !body.barber_name || !body.booking_code) {
-    return NextResponse.json({ error: "Data booking tidak lengkap." }, { status: 400 });
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > 20_000) {
+    return NextResponse.json({ error: "Data notifikasi terlalu besar." }, { status: 413 });
   }
 
-  const bookingDate = new Date(body.start_at).toLocaleString("id-ID", {
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Data booking tidak valid." }, { status: 400 });
+  }
+
+  const customerName = String(body.customer_name || "").trim();
+  const phone = String(body.phone || "").trim();
+  const address = String(body.address || "").trim();
+  const barberName = String(body.barber_name || "").trim();
+  const bookingCode = String(body.booking_code || "").trim();
+  const notes = String(body.notes || "").trim();
+  const startAt = new Date(body.start_at);
+  const phoneDigits = phone.replace(/[^0-9]/g, "");
+
+  if (
+    !customerName || customerName.length > 120 ||
+    phoneDigits.length < 8 || phoneDigits.length > 16 ||
+    !address || address.length > 1000 ||
+    !barberName || barberName.length > 100 ||
+    !/^\\d{5}$/.test(bookingCode) ||
+    !Number.isFinite(startAt.getTime()) ||
+    notes.length > 1000
+  ) {
+    return NextResponse.json({ error: "Data booking tidak lengkap atau formatnya tidak valid." }, { status: 400 });
+  }
+
+  const bookingDate = startAt.toLocaleString("id-ID", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: "Asia/Jakarta",
@@ -25,20 +51,18 @@ export async function POST(request: Request) {
       template_id: "template_srgzub4",
       user_id: publicKey,
       template_params: {
-        customer_name: body.customer_name,
-        phone: body.phone,
-        address: body.address,
-        barber_name: body.barber_name,
+        customer_name: customerName,
+        phone,
+        address,
+        barber_name: barberName,
         booking_date: bookingDate,
-        notes: body.notes || "-",
-        booking_code: body.booking_code,
+        notes: notes || "-",
+        booking_code: bookingCode,
       },
     }),
   });
 
   if (!response.ok) {
-    const details = await response.text().catch(() => "");
-    console.error("EmailJS notification failed:", details);
     return NextResponse.json({ error: "Booking tersimpan, tetapi email notifikasi gagal dikirim." }, { status: 502 });
   }
 
