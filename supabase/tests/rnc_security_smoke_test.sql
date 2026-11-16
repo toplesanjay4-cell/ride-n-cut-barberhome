@@ -226,6 +226,27 @@ begin
     raise exception 'FAIL: public booking availability RPC is not a minimal, private-data-safe function';
   end if;
 
+  -- The state-write trigger relies on SECURITY DEFINER RPCs owned by postgres.
+  select count(*) into v_policy_count
+  from unnest(array[
+    'public.rnc_admin_set_booking_status(uuid,text)'::regprocedure,
+    'public.rnc_admin_verify_booking_payment(uuid)'::regprocedure,
+    'public.rnc_admin_update_booking(uuid,text,text,text,uuid,timestamp with time zone,text,text)'::regprocedure,
+    'public.rnc_admin_mark_payment_refunded(uuid)'::regprocedure,
+    'public.rnc_admin_review_booking_cancellation(uuid,text)'::regprocedure,
+    'public.customer_request_booking_cancellation(text,text,uuid)'::regprocedure,
+    'public.customer_approve_booking_quote(text,text,uuid,text)'::regprocedure,
+    'public.customer_select_booking_payment(text,text,uuid,text)'::regprocedure,
+    'public.customer_attach_payment_proof(text,text,uuid,text)'::regprocedure,
+    'public.customer_booking_slots(uuid,date)'::regprocedure
+  ]) as required_functions(function_oid)
+  join pg_proc p on p.oid = required_functions.function_oid
+  join pg_roles r on r.oid = p.proowner
+  where p.prosecdef is true and r.rolname = 'postgres';
+  if v_policy_count <> 10 then
+    raise exception 'FAIL: validated booking/payment RPCs must be SECURITY DEFINER functions owned by postgres';
+  end if;
+
   raise notice 'PASS: Ride N Cut security smoke checks passed. This does not replace role-based integration tests.';
 end
 $rnc_test$;
