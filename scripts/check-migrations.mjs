@@ -8,7 +8,7 @@ const files = (await readdir(migrationDir))
 
 const expected = [
   "20261115000100_rnc_redesign_additive_schema.sql",
-  ...Array.from({ length: 20 }, (_, index) => {
+  ...Array.from({ length: 21 }, (_, index) => {
     const number = String(index + 1).padStart(4, "0");
     const titles = [
       "rnc_atomic_booking_slots",
@@ -31,6 +31,7 @@ const expected = [
       "rnc_restrict_owner_role_provisioning",
       "rnc_record_external_payment_refunds",
       "rnc_freeze_customer_payment_during_cancellation",
+      "rnc_harden_cancellation_transition_guards",
     ];
     return `20261116${number}00_${titles[index]}.sql`;
   }),
@@ -66,6 +67,9 @@ for (const marker of [
   "rnc_admin_verify_booking_payment",
   "rnc_admin_update_booking",
   "rnc_admin_mark_payment_refunded",
+  "rnc_can_upload_payment_proof",
+  "rnc_guard_booking_schedule_update",
+  "cancellation transition, proof upload, reschedule, or refund guards",
 ]) {
   if (!smoke.includes(marker)) errors.push(`Security smoke test is missing check: ${marker}`);
 }
