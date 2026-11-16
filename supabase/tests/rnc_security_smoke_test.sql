@@ -240,7 +240,7 @@ begin
     'public.customer_attach_payment_proof(text,text,uuid,text)'::regprocedure,
     'public.customer_booking_slots(uuid,date)'::regprocedure
   ]) as required_functions(function_oid)
-  join pg_proc p on p.oid = required_functions.function_oid
+  join pg_proc p on p.oid = required_functions.function_oid::oid
   join pg_roles r on r.oid = p.proowner
   where p.prosecdef is true and r.rolname = 'postgres';
   if v_policy_count <> 10 then
