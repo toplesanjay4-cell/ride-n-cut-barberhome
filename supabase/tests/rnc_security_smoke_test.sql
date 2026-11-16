@@ -26,18 +26,32 @@ begin
     raise exception 'FAIL: broad owner role-management policy still exists';
   end if;
 
-  -- Owners may provision staff only; all three write paths must constrain role.
+  -- Verify the policy expressions, not just their names: each write path
+  -- must require an owner actor and must restrict affected rows to role=staff.
   select count(*) into v_policy_count
   from pg_policies
   where schemaname = 'public'
     and tablename = 'user_roles'
-    and policyname in (
-      'rnc owner creates staff roles',
-      'rnc owner updates staff roles',
-      'rnc owner deletes staff roles'
+    and (
+      (policyname = 'rnc owner creates staff roles'
+       and cmd = 'INSERT'
+       and coalesce(with_check, '') ilike '%staff%'
+       and coalesce(with_check, '') ilike '%rnc_has_role%owner%')
+      or
+      (policyname = 'rnc owner updates staff roles'
+       and cmd = 'UPDATE'
+       and coalesce(qual, '') ilike '%staff%'
+       and coalesce(qual, '') ilike '%rnc_has_role%owner%'
+       and coalesce(with_check, '') ilike '%staff%'
+       and coalesce(with_check, '') ilike '%rnc_has_role%owner%')
+      or
+      (policyname = 'rnc owner deletes staff roles'
+       and cmd = 'DELETE'
+       and coalesce(qual, '') ilike '%staff%'
+       and coalesce(qual, '') ilike '%rnc_has_role%owner%')
     );
   if v_policy_count <> 3 then
-    raise exception 'FAIL: staff-only role policies are missing';
+    raise exception 'FAIL: staff role policies are missing or do not enforce staff-only owner access';
   end if;
 
   -- Direct client writes to payments are forbidden; mutations go through RPCs.
