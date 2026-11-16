@@ -132,7 +132,10 @@ begin
      or position('v_payment_status = ''paid''' in pg_get_functiondef('public.rnc_admin_set_booking_status(uuid,text)'::regprocedure)) = 0
      or position('v_cancellation_status <> ''requested''' in pg_get_functiondef('public.rnc_admin_mark_payment_refunded(uuid)'::regprocedure)) = 0
      or position('for update' in lower(pg_get_functiondef('public.rnc_admin_mark_payment_refunded(uuid)'::regprocedure))) = 0
-     or position('Always lock booking first' in pg_get_functiondef('public.rnc_admin_verify_booking_payment(uuid)'::regprocedure)) = 0 then
+     or position('Always lock booking first' in pg_get_functiondef('public.rnc_admin_verify_booking_payment(uuid)'::regprocedure)) = 0
+     or position('v_cancellation_status = ''requested''' in pg_get_functiondef('public.customer_approve_booking_quote(text,text,uuid,text)'::regprocedure)) = 0
+     or position('v_cancellation_status = ''requested''' in pg_get_functiondef('public.customer_select_booking_payment(text,text,uuid,text)'::regprocedure)) = 0
+     or position('v_cancellation_status = ''requested''' in pg_get_functiondef('public.customer_attach_payment_proof(text,text,uuid,text)'::regprocedure)) = 0 then
     raise exception 'FAIL: paid cancellation/refund guards are missing';
   end if;
 
