@@ -8,7 +8,7 @@ const files = (await readdir(migrationDir))
 
 const expected = [
   "20261115000100_rnc_redesign_additive_schema.sql",
-  ...Array.from({ length: 19 }, (_, index) => {
+  ...Array.from({ length: 20 }, (_, index) => {
     const number = String(index + 1).padStart(4, "0");
     const titles = [
       "rnc_atomic_booking_slots",
@@ -30,6 +30,7 @@ const expected = [
       "rnc_public_booking_buffer",
       "rnc_restrict_owner_role_provisioning",
       "rnc_record_external_payment_refunds",
+      "rnc_freeze_customer_payment_during_cancellation",
     ];
     return `20261116${number}00_${titles[index]}.sql`;
   }),
