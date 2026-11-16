@@ -105,13 +105,13 @@ begin
   v_local_time := to_char(v_local_start, 'HH24:MI');
   v_day_of_week := extract(dow from v_local_start)::integer;
 
-  if v_local_start::date in (
-    select value::date
+  if v_local_date in (
+    select value
     from jsonb_array_elements_text(
       case when jsonb_typeof(v_schedule->'blocked_dates') = 'array'
         then v_schedule->'blocked_dates' else '[]'::jsonb end
     ) as dates(value)
-    where value ~ '^\\d{4}-\\d{2}-\\d{2}$'
+    where value ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
   ) then
     raise exception 'Tanggal tersebut tidak menerima booking.';
   end if;
