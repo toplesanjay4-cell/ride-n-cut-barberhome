@@ -17,8 +17,8 @@ declare
   v_status text;
   v_cancel_status text;
 begin
-  select b.status, b.cancellation_status, b.payment_status
-    into v_status, v_cancel_status, v_payment_status
+  select b.status, b.cancellation_status
+    into v_status, v_cancel_status
   from public.bookings b
   where b.id = p_booking_id
     and regexp_replace(coalesce(b.phone,''),'[^0-9]','','g') = regexp_replace(coalesce(p_phone,''),'[^0-9]','','g')
@@ -66,8 +66,8 @@ begin
     return false;
   end if;
 
-  select b.status, b.cancellation_status
-    into v_status, v_cancel_status
+  select b.status, b.cancellation_status, b.payment_status
+    into v_status, v_cancel_status, v_payment_status
   from public.bookings b
   where b.id = p_booking_id
   for update;
