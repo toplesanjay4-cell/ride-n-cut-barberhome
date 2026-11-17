@@ -12,12 +12,42 @@ export async function POST(request: Request) {
     return json({ error: "EmailJS belum dikonfigurasi di server." }, 503);
   }
 
-  const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 12_000) {
+  const contentLengthHeader = request.headers.get("content-length");
+  const contentLength = contentLengthHeader ? Number(contentLengthHeader) : 0;
+  if ((contentLengthHeader && !Number.isFinite(contentLength)) || contentLength > 12_000) {
     return json({ error: "Ukuran data booking terlalu besar." }, 413);
   }
 
-  const body: unknown = await request.json().catch(() => null);
+  let rawBody = "";
+  const reader = request.body?.getReader();
+  if (!reader) return json({ error: "Data booking tidak ditemukan." }, 400);
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > 12_000) {
+        await reader.cancel();
+        return json({ error: "Ukuran data booking terlalu besar." }, 413);
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    rawBody = new TextDecoder().decode(bytes);
+  } catch {
+    return json({ error: "Data booking tidak dapat dibaca." }, 400);
+  }
+
+  const body: unknown = (() => {
+    try { return JSON.parse(rawBody); } catch { return null; }
+  })();
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return json({ error: "Format data booking tidak valid." }, 400);
   }
