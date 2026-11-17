@@ -31,7 +31,7 @@ export default function Home() {
    setHistoryMessage("Masukkan nomor WhatsApp yang valid (8–16 angka).");
    return;
   }
-  if(!/^\\d{5}$/.test(code)){
+  if(!/^\d{5}$/.test(code)){
    setCustomerBookings([]);
    setHistoryMessage("Masukkan kode booking yang terdiri dari tepat 5 angka.");
    return;
