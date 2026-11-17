@@ -23,7 +23,7 @@ jobs:
           npm audit --json > npm-audit.json || true
           node -e "const a=require('./npm-audit.json'); console.log(JSON.stringify(a.vulnerabilities || {}, null, 2))"
       - name: Block high-severity vulnerabilities
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=moderate
       - name: Type-check
         run: npx tsc --noEmit
       - name: Production build
