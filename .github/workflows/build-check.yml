@@ -32,5 +32,9 @@ jobs:
         run: |
           npm audit --json > npm-audit-report.json || true
           node -e 'const r=require("./npm-audit-report.json"); const items=Object.entries(r.vulnerabilities||{}); if(!items.length){console.log("No dependency advisories found."); process.exit(0)} for(const [name,v] of items){console.log(`${name}: ${v.severity}; range=${v.range}; direct=${v.isDirect}; fix=${JSON.stringify(v.fixAvailable)}`); for(const a of (v.via||[])){if(typeof a!=="string") console.log(`  - ${a.title||a.name}: ${a.url||""}`)}}'
+      - name: Block moderate and high dependency vulnerabilities
+        run: npm audit --audit-level=moderate
+      - name: Type-check
+        run: npx tsc --noEmit
       - name: Build Next.js
         run: npm run build
