@@ -24,8 +24,10 @@ jobs:
         run: npm install
       - name: Check migration integrity
         run: npm run check:migrations
-      - name: Run unit tests
-        run: npm run test:unit
+      - name: Run unit tests in UTC and a non-Jakarta browser timezone
+        run: |
+          npm run test:unit
+          TZ=Pacific/Honolulu npm run test:unit
       - name: Report dependency advisories
         run: |
           npm audit --json > npm-audit-report.json || true
