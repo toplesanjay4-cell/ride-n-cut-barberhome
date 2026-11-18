@@ -42,5 +42,5 @@ test("date-key arithmetic is independent of the browser timezone", () => {
 
 test("calendar labels and booking timestamps render in Jakarta time", () => {
   assert.match(formatJakartaDateKey("2026-11-18", { weekday: "long" }).toLowerCase(), /rabu/);
-  assert.match(formatJakartaDateTime("2026-11-17T17:00:00.000Z", { hour: "2-digit", minute: "2-digit" }), /00:00/);
+  assert.match(formatJakartaDateTime("2026-11-17T17:00:00.000Z", { hour: "2-digit", minute: "2-digit" }), /00[.:]00/);
 });
