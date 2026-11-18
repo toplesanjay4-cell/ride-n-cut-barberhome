@@ -24,6 +24,8 @@ jobs:
         run: npm install
       - name: Check migration integrity
         run: npm run check:migrations
+      - name: Run unit tests
+        run: npm run test:unit
       - name: Report dependency advisories
         run: |
           npm audit --json > npm-audit-report.json || true
