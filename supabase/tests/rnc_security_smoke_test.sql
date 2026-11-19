@@ -247,24 +247,51 @@ begin
     raise exception 'FAIL: validated booking/payment RPCs must be SECURITY DEFINER functions owned by postgres';
   end if;
 
-  -- Customer-facing SECURITY DEFINER RPCs must be callable by anon,
-  -- while admin mutation RPCs must never be executable by anon.
+  -- Public booking creation and minimal availability remain available to customers.
   select count(*) into v_policy_count
   from unnest(array[
     'public.customer_create_booking(text,text,text,uuid,timestamp with time zone,text,text,integer,uuid,text,double precision,double precision)'::regprocedure,
-    'public.customer_booking_quote(text,text,uuid)'::regprocedure,
-    'public.customer_approve_booking_quote(text,text,uuid,text)'::regprocedure,
-    'public.customer_select_booking_payment(text,text,uuid,text)'::regprocedure,
-    'public.customer_attach_payment_proof(text,text,uuid,text)'::regprocedure,
-    'public.customer_booking_payment(text,text,uuid)'::regprocedure,
-    'public.customer_request_booking_cancellation(text,text,uuid)'::regprocedure,
-    'public.customer_booking_cancellation_status(text,text,uuid)'::regprocedure,
     'public.customer_booking_slots(uuid,date)'::regprocedure
-  ]) as customer_functions(function_oid)
-  where has_function_privilege('anon', customer_functions.function_oid, 'EXECUTE')
-    and has_function_privilege('authenticated', customer_functions.function_oid, 'EXECUTE');
+  ]) as public_functions(function_oid)
+  where has_function_privilege('anon', public_functions.function_oid, 'EXECUTE')
+    and has_function_privilege('authenticated', public_functions.function_oid, 'EXECUTE');
+  if v_policy_count <> 2 then
+    raise exception 'FAIL: public booking creation or minimal availability RPC grants are missing';
+  end if;
+
+  -- Phone/code-based customer actions must be callable only by the server role.
+  select count(distinct p.proname) into v_policy_count
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = any(array[
+      'customer_booking_history', 'customer_booking_quote', 'customer_booking_payment',
+      'customer_booking_cancellation_status', 'customer_approve_booking_quote',
+      'customer_select_booking_payment', 'customer_attach_payment_proof',
+      'customer_request_booking_cancellation', 'rnc_can_upload_payment_proof'
+    ])
+    and not has_function_privilege('anon', p.oid, 'EXECUTE')
+    and not has_function_privilege('authenticated', p.oid, 'EXECUTE')
+    and has_function_privilege('service_role', p.oid, 'EXECUTE');
   if v_policy_count <> 9 then
-    raise exception 'FAIL: customer RPC execute grants are missing or inconsistent for anon/authenticated';
+    raise exception 'FAIL: customer phone/code RPCs are not restricted to service_role';
+  end if;
+
+  if to_regclass('public.rnc_customer_rate_limits') is null
+     or to_regprocedure('public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)') is null
+     or has_table_privilege('anon', 'public.rnc_customer_rate_limits', 'SELECT')
+     or has_table_privilege('authenticated', 'public.rnc_customer_rate_limits', 'SELECT')
+     or has_function_privilege('anon', 'public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)', 'EXECUTE')
+     or not has_function_privilege('service_role', 'public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)', 'EXECUTE') then
+    raise exception 'FAIL: private database-backed customer rate limiter is missing or exposed';
+  end if;
+
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname = 'rnc customer uploads own payment proof'
+  ) then
+    raise exception 'FAIL: direct anonymous customer proof upload policy remains enabled';
   end if;
 
   select count(*) into v_policy_count
