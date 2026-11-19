@@ -23,80 +23,62 @@ export default function Home() {
  async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault();if(submitting)return;setMessage("");if(!supabase){setMessage("Koneksi database belum diatur. Silakan hubungi admin.");return;}if(!publicServices.length){setMessage("Booking belum tersedia karena layanan belum diatur oleh admin.");return;}if(!form.service_id||!publicServices.some(service=>service.id===form.service_id)){setMessage("Pilih layanan yang tersedia terlebih dahulu.");return;}if(!form.barber_id){setMessage("Pilih barber terlebih dahulu.");return;}const startAt=jakartaDateTimeToISOString(form.date,form.time);const weekday=getDateKeyWeekday(form.date);if(form.date<minDate||form.date>maxDate||weekday===null||schedule.weekly_days_off.includes(weekday)||schedule.blocked_dates.includes(form.date)||schedule.blocked_times.includes(form.date+"|"+form.time)||!availableTimes.includes(form.time)||isSlotOccupied(form.time)||!startAt||Date.parse(startAt)<=Date.now()){setMessage("Pilih tanggal dan jam yang masih tersedia.");return;}const selectedService=publicServices.find(service=>service.id===form.service_id);const serviceDuration=selectedService?.duration_minutes||60;const latitude=form.latitude.trim()===""?null:Number(form.latitude),longitude=form.longitude.trim()===""?null:Number(form.longitude);if((latitude===null)!==(longitude===null)||(latitude!==null&&(!Number.isFinite(latitude)||latitude < -90||latitude > 90))||(longitude!==null&&(!Number.isFinite(longitude)||longitude < -180||longitude > 180))){setMessage("Koordinat lokasi tidak valid. Periksa latitude dan longitude.");return;}setSubmitting(true);setEmailSent(null);try{const newCode=String(crypto.getRandomValues(new Uint32Array(1))[0]%90000+10000);const bookingData={customer_name:form.customer_name.trim(),phone:form.phone.trim(),address:form.address.trim(),customer_latitude:latitude,customer_longitude:longitude,barber_id:form.barber_id,start_at:startAt,notes:form.notes.trim()||null,status:"pending",booking_code:newCode,service_id:selectedService?.id||null,service_name:selectedService?.name||"Personal Barber",service_duration_minutes:serviceDuration};const {data:createdBooking,error}=await supabase.rpc("customer_create_booking",{p_customer_name:bookingData.customer_name,p_phone:bookingData.phone,p_address:bookingData.address,p_barber_id:bookingData.barber_id,p_start_at:bookingData.start_at,p_notes:bookingData.notes,p_booking_code:newCode,p_duration_minutes:serviceDuration,p_service_id:selectedService?.id||null,p_service_name:bookingData.service_name,p_customer_latitude:bookingData.customer_latitude,p_customer_longitude:bookingData.customer_longitude});if(error||!createdBooking){setMessage("Booking gagal: "+(error?.message||"Jadwal mungkin baru saja terisi. Silakan pilih jam lain."));return;}const barberName=barbers.find(b=>b.id===form.barber_id)?.name||"Ride N Cut";const emailResult=await fetch("/api/booking-notification",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...bookingData,barber_name:barberName})}).then(r=>r.ok).catch(()=>false);setMessage(emailResult?"":"Booking tersimpan, tetapi email notifikasi belum terkirim. Hubungi admin untuk memastikan pesanan.");setEmailSent(emailResult);setBookingCode(newCode);setHistoryPhone(form.phone.trim());setHistoryCode(newCode);setBookingSuccess(true);setForm(v=>({...v,customer_name:"",phone:"",address:"",latitude:"",longitude:"",date:"",time:"",notes:""}));}catch{setMessage("Terjadi gangguan saat mengirim booking. Periksa riwayat sebelum mencoba lagi.");}finally{setSubmitting(false);}}
  async function findCustomerBookings(e?:React.FormEvent<HTMLFormElement>){
   e?.preventDefault();
-  if(!supabase)return;
   const phone=historyPhone.trim();
   const phoneDigits=phone.replace(/[^0-9]/g,"");
   const code=historyCode.trim();
-  if(phoneDigits.length<8||phoneDigits.length>16){
-   setCustomerBookings([]);
-   setHistoryMessage("Masukkan nomor WhatsApp yang valid (8–16 angka).");
-   return;
-  }
-  if(!/^\d{5}$/.test(code)){
-   setCustomerBookings([]);
-   setHistoryMessage("Masukkan kode booking yang terdiri dari tepat 5 angka.");
-   return;
-  }
-  const client=supabase;
-  setHistoryLoading(true);
-  setHistoryMessage("");
-  setCustomerBookings([]);
-  setCustomerQuotes({});
-  setCustomerPaymentMethods({});
-  setCustomerPayments({});
-  setCustomerCancellation({});
+  if(phoneDigits.length<8||phoneDigits.length>16){setCustomerBookings([]);setHistoryMessage("Masukkan nomor WhatsApp yang valid (8–16 angka).");return;}
+  if(!/^\d{5}$/.test(code)){setCustomerBookings([]);setHistoryMessage("Masukkan kode booking yang terdiri dari tepat 5 angka.");return;}
+  setHistoryLoading(true);setHistoryMessage("");setCustomerBookings([]);setCustomerQuotes({});setCustomerPaymentMethods({});setCustomerPayments({});setCustomerCancellation({});
   try{
-   const {data,error}=await client.rpc("customer_booking_history",{p_phone:phone,p_code:code});
-   if(error){
-    setHistoryMessage("Riwayat belum bisa dimuat. Coba lagi atau hubungi admin.");
-    return;
-   }
-   const bookings=(data||[]) as CustomerBooking[];
-   setCustomerBookings(bookings);
-   if(!bookings.length){
-    setHistoryMessage("Booking tidak ditemukan. Periksa nomor WhatsApp dan kode booking.");
-    return;
-   }
-   const details=await Promise.all(bookings.map(async booking=>{
-    const [quoteResult,paymentResult,cancellationResult]=await Promise.all([
-     client.rpc("customer_booking_quote",{p_phone:phone,p_code:code,p_booking_id:booking.id}),
-     client.rpc("customer_booking_payment",{p_phone:phone,p_code:code,p_booking_id:booking.id}),
-     client.rpc("customer_booking_cancellation_status",{p_phone:phone,p_code:code,p_booking_id:booking.id})
-    ]);
-    return {bookingId:booking.id,quoteResult,paymentResult,cancellationResult};
-   }));
-   const quoteMap:Record<string,CustomerQuote>={};
-   const paymentMap:Record<string,CustomerPayment>={};
-   const paymentMethodMap:Record<string,string>={};
-   const cancellationMap:Record<string,{status:string}>={};
+   const response=await fetch("/api/customer/booking",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",phone,code})});
+   const result=await response.json().catch(()=>({}));
+   if(!response.ok){setHistoryMessage(typeof result.error==="string"?result.error:"Riwayat belum bisa dimuat. Coba lagi atau hubungi admin.");return;}
+   const bookings=(result.bookings||[]) as CustomerBooking[];setCustomerBookings(bookings);
+   if(!bookings.length){setHistoryMessage("Booking tidak ditemukan. Periksa nomor WhatsApp dan kode booking.");return;}
+   const quoteMap:Record<string,CustomerQuote>={},paymentMap:Record<string,CustomerPayment>={},paymentMethodMap:Record<string,string>={},cancellationMap:Record<string,{status:string}>={};
    let detailLoadFailed=false;
-   for(const detail of details){
-    if(detail.quoteResult.error||detail.paymentResult.error||detail.cancellationResult.error)detailLoadFailed=true;
-    const quote=detail.quoteResult.data?.[0] as CustomerQuote|undefined;
-    const payment=detail.paymentResult.data?.[0] as CustomerPayment|undefined;
-    const cancellationStatus=detail.cancellationResult.data?.[0]?.cancellation_status as string|undefined;
-    if(quote)quoteMap[detail.bookingId]=quote;
-    if(payment){
-     paymentMap[detail.bookingId]=payment;
-     paymentMethodMap[detail.bookingId]=payment.method_type;
-    }
-    cancellationMap[detail.bookingId]={status:cancellationStatus||"none"};
+   for(const detail of (result.details||[]) as {bookingId:string;quote:CustomerQuote|null;payment:CustomerPayment|null;cancellationStatus:string;failed:boolean}[]){
+    if(detail.failed)detailLoadFailed=true;
+    if(detail.quote)quoteMap[detail.bookingId]=detail.quote;
+    if(detail.payment){paymentMap[detail.bookingId]=detail.payment;paymentMethodMap[detail.bookingId]=detail.payment.method_type;}
+    cancellationMap[detail.bookingId]={status:detail.cancellationStatus||"none"};
    }
-   setCustomerQuotes(quoteMap);
-   setCustomerPayments(paymentMap);
-   setCustomerPaymentMethods(paymentMethodMap);
-   setCustomerCancellation(cancellationMap);
+   setCustomerQuotes(quoteMap);setCustomerPayments(paymentMap);setCustomerPaymentMethods(paymentMethodMap);setCustomerCancellation(cancellationMap);
    if(detailLoadFailed)setHistoryMessage("Booking ditemukan, tetapi sebagian detail belum dapat dimuat. Tekan Cek Riwayat untuk mencoba lagi.");
-  }catch{
-   setHistoryMessage("Terjadi gangguan saat memuat riwayat. Coba lagi atau hubungi admin.");
-  }finally{
-   setHistoryLoading(false);
-  }
+  }catch{setHistoryMessage("Terjadi gangguan saat memuat riwayat. Coba lagi atau hubungi admin.");}
+  finally{setHistoryLoading(false);}
  }
- async function approveCustomerQuote(id:string){if(!supabase||!window.confirm("Setuju dengan total harga yang ditawarkan Ride N Cut?"))return;setHistoryLoading(true);const {data,error}=await supabase.rpc("customer_approve_booking_quote",{p_phone:historyPhone.trim(),p_code:historyCode.trim(),p_booking_id:id,p_approval_channel:"website"});setHistoryLoading(false);if(error||!data){setHistoryMessage("Persetujuan gagal diproses. Pastikan penawaran masih berlaku atau hubungi admin.");return;}setHistoryMessage("Harga berhasil disetujui. Booking tetap menunggu konfirmasi jadwal dari admin.");await findCustomerBookings();}
- async function selectCustomerPayment(id:string){if(!supabase)return;const method=customerPaymentMethods[id];if(!method){setHistoryMessage("Pilih metode pembayaran terlebih dahulu.");return;}if(!window.confirm("Pilih metode pembayaran "+(method==="cash"?"tunai":method==="bank_transfer"?"transfer bank":method==="e_wallet"?"e-wallet":"QRIS")+" untuk booking ini?"))return;setHistoryLoading(true);const {data,error}=await supabase.rpc("customer_select_booking_payment",{p_phone:historyPhone.trim(),p_code:historyCode.trim(),p_booking_id:id,p_method:method});setHistoryLoading(false);if(error||!data){setHistoryMessage("Metode pembayaran belum bisa disimpan. Pastikan migrasi sistem baru sudah diterapkan.");return;}setPaymentSelected(v=>({...v,[id]:true}));setCustomerPayments(v=>({...v,[id]:{method_type:method,payment_status:method==="cash"?"unpaid":"waiting_verification",has_proof:false,created_at:new Date().toISOString()}}));setHistoryMessage("Metode pembayaran tersimpan. Admin akan memeriksa pembayaran dan memperbarui statusnya.");}
- async function uploadCustomerPaymentProof(id:string){if(!supabase)return;const file=paymentProofFiles[id];if(!file){setHistoryMessage("Pilih file bukti pembayaran terlebih dahulu.");return;}if(!["image/jpeg","image/png","image/webp","application/pdf"].includes(file.type)||file.size>5*1024*1024){setHistoryMessage("File harus JPG, PNG, WEBP, atau PDF dengan ukuran maksimal 5 MB.");return;}const phoneDigits=historyPhone.replace(/[^0-9]/g,"");const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=id+"/"+historyCode+"/"+phoneDigits+"/"+Date.now()+"-"+safeName;setHistoryLoading(true);const {error:uploadError}=await supabase.storage.from("rnc-payment-proofs").upload(path,file,{upsert:false,contentType:file.type});if(uploadError){setHistoryLoading(false);setHistoryMessage("Upload bukti gagal: "+uploadError.message);return;}const {data,error}=await supabase.rpc("customer_attach_payment_proof",{p_phone:historyPhone.trim(),p_code:historyCode.trim(),p_booking_id:id,p_proof_path:path});setHistoryLoading(false);if(error||!data){setHistoryMessage("File terunggah, tetapi belum berhasil ditautkan ke pembayaran. Hubungi admin.");return;}setCustomerPayments(v=>({...v,[id]:v[id]?{...v[id],has_proof:true}:v[id]}));setHistoryMessage("Bukti pembayaran berhasil dikirim. Menunggu verifikasi admin.");setPaymentProofFiles(v=>({...v,[id]:null}));}
- async function cancelCustomerBooking(id:string){if(!supabase||!window.confirm("Kirim permintaan pembatalan kepada admin? Booking belum dibatalkan sampai admin menyetujui."))return;setHistoryLoading(true);const {data,error}=await supabase.rpc("customer_request_booking_cancellation",{p_phone:historyPhone.trim(),p_code:historyCode.trim().toUpperCase(),p_booking_id:id});setHistoryLoading(false);if(error||!data){setHistoryMessage("Permintaan pembatalan gagal dikirim. Periksa status booking atau coba lagi.");return;}setCustomerCancellation(v=>({...v,[id]:{status:"requested"}}));setHistoryMessage("Permintaan pembatalan terkirim. Booking tetap aktif sampai admin meninjau permintaan.");}
+ async function approveCustomerQuote(id:string){
+  if(!window.confirm("Setuju dengan total harga yang ditawarkan Ride N Cut?"))return;
+  setHistoryLoading(true);
+  try{const response=await fetch("/api/customer/booking",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"approve_quote",phone:historyPhone,code:historyCode,booking_id:id})});const result=await response.json().catch(()=>({}));if(!response.ok){setHistoryMessage(typeof result.error==="string"?result.error:"Persetujuan gagal diproses.");return;}setHistoryMessage("Harga berhasil disetujui. Booking tetap menunggu konfirmasi jadwal dari admin.");await findCustomerBookings();}
+  catch{setHistoryMessage("Persetujuan belum bisa diproses. Coba lagi.");}
+  finally{setHistoryLoading(false);}
+ }
+ async function selectCustomerPayment(id:string){
+  const method=customerPaymentMethods[id];if(!method){setHistoryMessage("Pilih metode pembayaran terlebih dahulu.");return;}
+  if(!window.confirm("Pilih metode pembayaran "+(method==="cash"?"tunai":method==="bank_transfer"?"transfer bank":method==="e_wallet"?"e-wallet":"QRIS")+" untuk booking ini?"))return;
+  setHistoryLoading(true);
+  try{const response=await fetch("/api/customer/booking",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"select_payment",phone:historyPhone,code:historyCode,booking_id:id,method})});const result=await response.json().catch(()=>({}));if(!response.ok){setHistoryMessage(typeof result.error==="string"?result.error:"Metode pembayaran belum bisa disimpan.");return;}setPaymentSelected(v=>({...v,[id]:true}));setCustomerPayments(v=>({...v,[id]:{method_type:method,payment_status:method==="cash"?"unpaid":"waiting_verification",has_proof:false,created_at:new Date().toISOString()}}));setHistoryMessage("Metode pembayaran tersimpan. Admin akan memeriksa pembayaran dan memperbarui statusnya.");}
+  catch{setHistoryMessage("Metode pembayaran belum bisa disimpan. Coba lagi.");}
+  finally{setHistoryLoading(false);}
+ }
+ async function uploadCustomerPaymentProof(id:string){
+  const file=paymentProofFiles[id];if(!file){setHistoryMessage("Pilih file bukti pembayaran terlebih dahulu.");return;}
+  if(!["image/jpeg","image/png","image/webp","application/pdf"].includes(file.type)||file.size>5*1024*1024){setHistoryMessage("File harus JPG, PNG, WEBP, atau PDF dengan ukuran maksimal 5 MB.");return;}
+  const body=new FormData();body.set("action","upload_proof");body.set("phone",historyPhone);body.set("code",historyCode);body.set("booking_id",id);body.set("file",file);
+  setHistoryLoading(true);
+  try{const response=await fetch("/api/customer/booking",{method:"POST",body});const result=await response.json().catch(()=>({}));if(!response.ok){setHistoryMessage(typeof result.error==="string"?result.error:"Upload bukti pembayaran gagal.");return;}setCustomerPayments(v=>({...v,[id]:v[id]?{...v[id],has_proof:true}:v[id]}));setHistoryMessage("Bukti pembayaran berhasil dikirim. Menunggu verifikasi admin.");setPaymentProofFiles(v=>({...v,[id]:null}));}
+  catch{setHistoryMessage("Upload bukti pembayaran gagal. Coba lagi.");}
+  finally{setHistoryLoading(false);}
+ }
+ async function cancelCustomerBooking(id:string){
+  if(!window.confirm("Kirim permintaan pembatalan kepada admin? Booking belum dibatalkan sampai admin menyetujui."))return;
+  setHistoryLoading(true);
+  try{const response=await fetch("/api/customer/booking",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"cancel_booking",phone:historyPhone,code:historyCode,booking_id:id})});const result=await response.json().catch(()=>({}));if(!response.ok){setHistoryMessage(typeof result.error==="string"?result.error:"Permintaan pembatalan gagal dikirim.");return;}setCustomerCancellation(v=>({...v,[id]:{status:"requested"}}));setHistoryMessage("Permintaan pembatalan terkirim. Booking tetap aktif sampai admin meninjau permintaan.");}
+  catch{setHistoryMessage("Permintaan pembatalan gagal dikirim. Coba lagi.");}
+  finally{setHistoryLoading(false);}
+ }
  const statusLabel=(s:string)=>s==="pending"?"Menunggu konfirmasi":s==="confirmed"?"Dikonfirmasi":s==="cancelled"?"Dibatalkan":s==="completed"?"Selesai":s;
  const minDate=todayKey;const maxDate=addDateKeyDays(minDate,13);const selectedWeekday=getDateKeyWeekday(form.date||minDate);const dateClosed=selectedWeekday===null||schedule.weekly_days_off.includes(selectedWeekday)||schedule.blocked_dates.includes(form.date);const openMinutes=(()=>{const [h,m]=schedule.open_time.split(":").map(Number);return h*60+m;})();const closeMinutes=(()=>{const [h,m]=schedule.close_time.split(":").map(Number);return h*60+m;})();const selectedServiceForSchedule=publicServices.find(service=>service.id===form.service_id);const selectedDurationForSchedule=selectedServiceForSchedule?.duration_minutes||60;const scheduleInterval=Math.max(15,schedule.slot_interval);const availableTimes=Array.from({length:Math.max(0,Math.floor((closeMinutes-openMinutes-selectedDurationForSchedule)/scheduleInterval)+1)},(_,i)=>{const total=openMinutes+i*scheduleInterval;return String(Math.floor(total/60)).padStart(2,"0")+":"+String(total%60).padStart(2,"0");});
  const isSlotOccupied=(time:string)=>{if(!form.date)return false;if(slotLoadError)return true;const candidateStartIso=jakartaDateTimeToISOString(form.date,time);if(!candidateStartIso)return true;const candidateStart=Date.parse(candidateStartIso);const buffer=Math.max(0,Math.min(180,Number(settings.booking_buffer_minutes)||0))*60*1000;const candidateDuration=(publicServices.find(service=>service.id===form.service_id)?.duration_minutes||60)*60*1000;return bookedIntervals.some(item=>{const existingStart=new Date(item.start_at).getTime();const existingEnd=existingStart+Math.max(10,item.duration_minutes||60)*60*1000;return candidateStart<existingEnd+buffer&&candidateStart+candidateDuration+buffer>existingStart;});};
