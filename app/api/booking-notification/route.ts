@@ -1,47 +1,28 @@
 import { NextResponse } from "next/server";
+import { readJsonObjectRequest } from "@/lib/request-json.mjs";
 
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 20_000;
 
+const json = (body: Record<string, unknown>, status = 200) =>
+  NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store" },
+  });
+
 export async function POST(request: Request) {
   const publicKey = process.env.EMAILJS_PUBLIC_KEY;
   if (!publicKey) {
-    return NextResponse.json({ error: "EmailJS belum dikonfigurasi di server." }, { status: 503 });
+    return json({ error: "EmailJS belum dikonfigurasi di server." }, 503);
   }
 
-  const contentType = request.headers.get("content-type") || "";
-  if (!contentType.toLowerCase().includes("application/json")) {
-    return NextResponse.json({ error: "Content-Type harus application/json." }, { status: 415 });
+  const parsedRequest = await readJsonObjectRequest(request, MAX_BODY_BYTES);
+  if (!parsedRequest.ok) {
+    return json({ error: parsedRequest.error }, parsedRequest.status);
   }
 
-  const contentLength = Number(request.headers.get("content-length") || 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "Data notifikasi terlalu besar." }, { status: 413 });
-  }
-
-  // Enforce the limit on the actual body too; Content-Length can be omitted.
-  let rawBody: string;
-  try {
-    rawBody = await request.text();
-  } catch {
-    return NextResponse.json({ error: "Data notifikasi tidak dapat dibaca." }, { status: 400 });
-  }
-  if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "Data notifikasi terlalu besar." }, { status: 413 });
-  }
-
-  let body: Record<string, unknown>;
-  try {
-    const parsed: unknown = JSON.parse(rawBody);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return NextResponse.json({ error: "Data booking tidak valid." }, { status: 400 });
-    }
-    body = parsed as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Data booking tidak valid." }, { status: 400 });
-  }
-
+  const body = parsedRequest.data;
   const customerName = typeof body.customer_name === "string" ? body.customer_name.trim() : "";
   const phone = typeof body.phone === "string" ? body.phone.trim() : "";
   const address = typeof body.address === "string" ? body.address.trim() : "";
@@ -61,7 +42,7 @@ export async function POST(request: Request) {
     !startAtValue || !Number.isFinite(startAt.getTime()) ||
     notes.length > 1000
   ) {
-    return NextResponse.json({ error: "Data booking tidak lengkap atau formatnya tidak valid." }, { status: 400 });
+    return json({ error: "Data booking tidak lengkap atau formatnya tidak valid." }, 400);
   }
 
   const bookingDate = startAt.toLocaleString("id-ID", {
@@ -70,9 +51,8 @@ export async function POST(request: Request) {
     timeZone: "Asia/Jakarta",
   });
 
-  let response: Response;
   try {
-    response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(8_000),
@@ -91,13 +71,13 @@ export async function POST(request: Request) {
         },
       }),
     });
+
+    if (!response.ok) {
+      return json({ error: "Booking tersimpan, tetapi email notifikasi gagal dikirim." }, 502);
+    }
   } catch {
-    return NextResponse.json({ error: "Booking tersimpan, tetapi layanan email sedang tidak tersedia." }, { status: 502 });
+    return json({ error: "Booking tersimpan, tetapi layanan email sedang tidak tersedia." }, 502);
   }
 
-  if (!response.ok) {
-    return NextResponse.json({ error: "Booking tersimpan, tetapi email notifikasi gagal dikirim." }, { status: 502 });
-  }
-
-  return NextResponse.json({ success: true });
+  return json({ success: true });
 }
