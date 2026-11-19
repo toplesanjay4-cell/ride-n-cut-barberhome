@@ -38,6 +38,7 @@ const expected = [
     return `20261116${number}00_${titles[index]}.sql`;
   }),
 ];
+expected.push("20261119000100_rnc_rate_limit_customer_access.sql");
 
 const errors = [];
 if (files.length !== expected.length) {
@@ -73,6 +74,9 @@ for (const marker of [
   "rnc_guard_booking_schedule_update",
   "rnc_guard_booking_state_update",
   "customer_booking_slots",
+  "rnc_customer_rate_limits",
+  "rnc_consume_customer_rate_limit",
+  "customer_booking_history",
   "validated booking/payment RPCs must be SECURITY DEFINER functions owned by postgres",
   "cancellation transition, proof upload, reschedule, or refund guards",
 ]) {
