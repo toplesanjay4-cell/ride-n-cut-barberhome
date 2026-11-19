@@ -67,7 +67,9 @@ export async function POST(request: Request) {
     const limitedBody = await readRequestBytesWithinLimit(request, MAX_PROOF_BYTES + 32_000, "Data upload");
     if (!limitedBody.ok) return reply({ error: limitedBody.error }, limitedBody.status);
     try {
-      form = await new Response(limitedBody.bytes, { headers: { "content-type": contentTypeHeader } }).formData();
+      const bodyBuffer = new ArrayBuffer(limitedBody.bytes.byteLength);
+      new Uint8Array(bodyBuffer).set(limitedBody.bytes);
+      form = await new Response(bodyBuffer, { headers: { "content-type": contentTypeHeader } }).formData();
     } catch {
       return reply({ error: "Data upload tidak valid." }, 400);
     }
