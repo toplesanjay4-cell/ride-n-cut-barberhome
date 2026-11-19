@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readJsonObjectRequest } from "../lib/request-json.mjs";
+import { readJsonObjectRequest, readRequestBytesWithinLimit } from "../lib/request-json.mjs";
 
 function makeRequest(body, contentType = "application/json", extraHeaders = {}) {
   return new Request("https://ride-n-cut.test/api/booking-notification", {
@@ -82,4 +82,34 @@ test("rejects invalid UTF-8 instead of silently replacing bytes", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.status, 400);
   assert.match(result.error, /UTF-8/);
+});
+
+test("streamed byte reader accepts a body within the limit", async () => {
+  const result = await readRequestBytesWithinLimit(makeRequest("small", "multipart/form-data; boundary=test"), 8, "Upload");
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(new TextDecoder().decode(result.bytes), "small");
+});
+
+test("streamed byte reader rejects oversized bodies without Content-Length", async () => {
+  const result = await readRequestBytesWithinLimit(makeRequest("x".repeat(129), "multipart/form-data; boundary=test"), 128, "Upload");
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 413);
+});
+
+test("streamed byte reader rejects declared oversized and malformed lengths", async () => {
+  const oversized = await readRequestBytesWithinLimit(
+    makeRequest("{}", "multipart/form-data; boundary=test", { "content-length": "129" }),
+    128,
+    "Upload",
+  );
+  assert.equal(oversized.ok, false);
+  assert.equal(oversized.status, 413);
+
+  const malformed = await readRequestBytesWithinLimit(
+    makeRequest("{}", "multipart/form-data; boundary=test", { "content-length": "12x" }),
+    128,
+    "Upload",
+  );
+  assert.equal(malformed.ok, false);
+  assert.equal(malformed.status, 400);
 });
