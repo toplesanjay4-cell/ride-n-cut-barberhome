@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { createHmac, randomUUID } from "node:crypto";
+import { readJsonObjectRequest, readRequestBytesWithinLimit } from "@/lib/request-json.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,19 +63,19 @@ export async function POST(request: Request) {
   let form: FormData | null = null;
 
   if (contentType === "multipart/form-data") {
-    const length = Number(request.headers.get("content-length") || 0);
-    if (Number.isFinite(length) && length > MAX_PROOF_BYTES + 32_000) return reply({ error: "File terlalu besar." }, 413);
-    try { form = await request.formData(); } catch { return reply({ error: "Data upload tidak valid." }, 400); }
+    const contentTypeHeader = request.headers.get("content-type") || "";
+    const limitedBody = await readRequestBytesWithinLimit(request, MAX_PROOF_BYTES + 32_000, "Data upload");
+    if (!limitedBody.ok) return reply({ error: limitedBody.error }, limitedBody.status);
+    try {
+      form = await new Response(limitedBody.bytes, { headers: { "content-type": contentTypeHeader } }).formData();
+    } catch {
+      return reply({ error: "Data upload tidak valid." }, 400);
+    }
     body = Object.fromEntries(Array.from(form.entries()).filter((entry) => typeof entry[1] === "string")) as Record<string, unknown>;
   } else {
-    if (contentType !== "application/json") return reply({ error: "Content-Type tidak didukung." }, 415);
-    const length = Number(request.headers.get("content-length") || 0);
-    if (Number.isFinite(length) && length > MAX_JSON_BYTES) return reply({ error: "Data permintaan terlalu besar." }, 413);
-    let raw = "";
-    try { raw = await request.text(); } catch { return reply({ error: "Data permintaan tidak dapat dibaca." }, 400); }
-    if (new TextEncoder().encode(raw).byteLength > MAX_JSON_BYTES) return reply({ error: "Data permintaan terlalu besar." }, 413);
-    try { const parsed: unknown = JSON.parse(raw); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return reply({ error: "Data permintaan tidak valid." }, 400); body = parsed as Record<string, unknown>; }
-    catch { return reply({ error: "Data permintaan tidak valid." }, 400); }
+    const parsedRequest = await readJsonObjectRequest(request, MAX_JSON_BYTES);
+    if (!parsedRequest.ok) return reply({ error: parsedRequest.error }, parsedRequest.status);
+    body = parsedRequest.data;
   }
 
   const action = typeof body.action === "string" ? body.action : "";
@@ -136,8 +137,8 @@ export async function POST(request: Request) {
   if (typeof File === "undefined" || !(file instanceof File) || file.size < 1 || file.size > MAX_PROOF_BYTES || !ALLOWED_PROOF_TYPES.has(file.type)) {
     return reply({ error: "File harus JPG, PNG, WEBP, atau PDF dengan ukuran maksimal 5 MB." }, 400);
   }
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100) || "payment-proof";
-  const path = bookingId + "/" + code + "/" + phone + "/" + Date.now() + "-" + randomUUID() + "-" + safeName;
+  const extension = file.type === "image/jpeg" ? "jpg" : file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "pdf";
+  const path = bookingId + "/" + randomUUID() + "." + extension;
   const { error: uploadError } = await admin.storage.from("rnc-payment-proofs").upload(path, new Uint8Array(await file.arrayBuffer()), { upsert: false, contentType: file.type });
   if (uploadError) return reply({ error: "Upload bukti pembayaran gagal. Coba lagi atau hubungi admin." }, 400);
   const { data, error } = await admin.rpc("customer_attach_payment_proof", { p_phone: phone, p_code: code, p_booking_id: bookingId, p_proof_path: path });
