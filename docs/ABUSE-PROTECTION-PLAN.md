@@ -1,40 +1,39 @@
 # Ride N Cut — Customer Abuse-Protection Plan
 
-## Why this is a release blocker
+## Threat model
 
-Customer booking lookup currently accepts a WhatsApp number and a five-digit booking code. The customer browser calls Supabase RPCs directly for booking history and related quote, payment, and cancellation details. A five-digit code has a small search space, so the phone/code pair must not be treated as sufficient protection without durable attempt throttling.
+Customer history and follow-up actions use a WhatsApp number plus a five-digit booking code. That pair must not be treated as sufficient protection without durable throttling. The protected operations are history lookup, quote/payment/cancellation detail reads, quote approval, payment selection, cancellation requests, and payment-proof upload/attachment.
 
-The same concern applies to customer actions that authenticate with the same phone/code pair (quote approval, payment-method selection, cancellation requests, and payment-proof operations). Protecting only the visible history form would leave direct RPC calls available.
+## Implemented on the redesign branch
 
-## Required design
+- Phone/code operations are routed through `POST /api/customer/booking`; the customer UI does not call those protected RPCs directly.
+- The `20261119000100_rnc_rate_limit_customer_access.sql` migration revokes anonymous/authenticated execution of the protected RPC overloads and grants them to `service_role` only.
+- A private Postgres counter table and atomic SECURITY DEFINER RPC share counters across application instances. Raw phone numbers and IP addresses are not stored.
+- The route derives separate, operation-scoped IP and phone keys with HMAC-SHA256. Both use the same server-only secret with distinct `ip:` and `phone:` domain prefixes; this provides key separation without storing either input.
+- Current route limits are: lookup 30/IP and 5/phone per 15 minutes; other actions 40/IP and 10/phone per 15 minutes; proof upload 20/IP and 4/phone per hour.
+- Rate-limit configuration failures fail closed with a generic 503. Exceeded limits return 429 and `Retry-After`.
+- Customer proof upload is handled by the server route; the migration removes the previous customer Storage upload policy. The proof bucket remains private and admins use short-lived signed URLs.
+- The route checks the claimed MIME type against the file's leading JPEG, PNG, WEBP, or PDF signature before upload. This is format validation only; it is not malware scanning or PDF sanitization.
 
-1. **Put customer identity checks behind a server-side boundary.** Move phone/code-based history reads and state-changing customer actions behind Next.js Route Handlers. Do not rely on client-side cooldowns or hidden UI controls.
-2. **Close direct bypasses.** After the server routes are in place, revoke anonymous/authenticated execution of the phone/code-based customer RPCs and grant execution only to the server's narrowly scoped database role. Verify every function signature and storage policy before changing grants. Do not use a service-role credential in browser code.
-3. **Use durable shared rate-limit storage.** Use a private Supabase/Postgres counter table and an atomic SECURITY DEFINER RPC. The counter is shared across all Vercel instances and deployments; do not use an in-memory JavaScript Map.
-4. **Use multiple independent keys.** HMAC of normalized client IP, using a server-only secret; HMAC of normalized phone number, using a different server-only secret; and an operation-specific key so lookup attempts cannot exhaust unrelated customer actions. Never persist raw phone numbers or raw IP addresses in the limiter.
-5. **Return consistent responses.** Respond with HTTP 429 and a Retry-After header when a limit is reached. Avoid revealing whether a phone number, booking code, or booking exists. Apply a small response-time floor or equivalent mitigation if practical.
-6. **Protect all relevant paths.** Include history lookup, quote/payment/cancellation detail reads, quote approval, payment selection, cancellation request, and proof upload/attachment. Review Storage upload/read policies separately; do not assume the API limiter covers direct Storage requests.
-7. **Operational controls.** Make limits configurable, log only operation, outcome, and a non-reversible request identifier, and provide a safe way to tune limits after observing legitimate traffic. Do not log booking codes, full phone numbers, addresses, or payment proof contents.
+The migration and route are committed to this branch, but the migration has **not** been applied to a live database. The route therefore remains unavailable until the target environment has the migration, `SUPABASE_SERVICE_ROLE_KEY`, and a unique `RNC_RATE_LIMIT_HMAC_SECRET` configured.
 
-## Initial acceptance criteria
+## Remaining verification
 
-- Requests from multiple Vercel instances share the same counters.
-- Repeated invalid phone/code attempts are throttled by both IP and phone-derived keys.
-- Changing the browser, refreshing, or calling Supabase directly cannot bypass the limits.
-- All customer phone/code RPCs and proof-storage paths are covered or explicitly documented as a separate residual risk.
-- Rate-limit storage failures fail closed for sensitive lookup/mutation operations, with a generic temporary-unavailable response.
-- Automated tests cover threshold, window expiry, concurrent requests, malformed inputs, spoofed forwarding headers, 429/Retry-After, and store failure.
-- A staging security test verifies direct anonymous RPC execution is denied after the migration.
+- Apply all migrations to a backed-up non-production Supabase project and run `supabase/tests/rnc_security_smoke_test.sql` as documented.
+- Verify direct anonymous/authenticated execution is denied for every protected RPC overload, while the server role can execute them.
+- Verify the Vercel-provided client IP header used by `requestIp()` in Preview. Do not rely on untrusted forwarding headers; test spoofed `x-forwarded-for` and `x-real-ip` values through the actual hosting proxy.
+- Add route/integration tests for IP and phone thresholds, window expiry, concurrent requests, malformed rate-limit responses, 429/`Retry-After`, and database/secret failure.
+- Test Storage policies independently: customers must not upload directly, the server can upload, the bucket stays private, and only authorized admins can obtain signed read URLs.
+- Observe legitimate traffic before changing the current hard-coded per-action limits. Do not log booking codes, full phone numbers, addresses, IP addresses, or proof contents.
 
-## Safe implementation order
+## Safe rollout order
 
-1. Apply the database rate-limit migration to a backed-up non-production Supabase project; configure a unique server-only HMAC secret in Vercel Preview.
-2. Implement and test the shared limiter utility and server routes.
-3. Switch the customer UI to those routes.
-4. Add a reviewed SQL migration that removes direct public execution from the protected RPCs while preserving only the intended server execution path.
-5. Review payment-proof Storage policies and test them independently.
-6. Deploy to Preview, run automated and manual abuse tests, then apply the same reviewed migration and separately configured secrets to Production only after staging passes.
+1. Back up a **non-production** Supabase project.
+2. Apply the 25 ordered migrations there, verify the existing owner UUID, and run the read-only security smoke test.
+3. Configure a unique server-only HMAC secret and service-role key in Vercel Preview; never expose either through a `NEXT_PUBLIC_` variable or commit a real value.
+4. Verify proxy IP handling, rate-limit behavior, protected RPC grants, Storage policies, and the complete customer/admin flows in Preview.
+5. Only after staging checks pass, plan a separately reviewed production backup and migration window. No production migration or deployment is authorized by this branch work.
 
-## Current status
+## Release status
 
-The server API and database-backed rate-limit implementation have now been added to the redesign branch. The migration is not yet applied to any live database, so the new route intentionally remains unavailable until the migration and server-only secrets are configured in the target environment. The existing staging and production environments remain untouched.
+The branch contains the rate-limit migration and server-side route, but neither has been validated against a real Supabase/Vercel staging environment. The security smoke test is read-only and has not yet been executed against staging. This feature remains a release blocker until those checks pass.
