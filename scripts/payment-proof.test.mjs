@@ -30,4 +30,5 @@ test("rejects unsupported, empty, truncated, and non-byte inputs", () => {
   assert.equal(isAllowedPaymentProof("image/webp", encoder.encode("RIFFxxxxWEB")), false);
   assert.equal(isAllowedPaymentProof("application/pdf", encoder.encode("%PDF")), false);
   assert.equal(isAllowedPaymentProof("image/png", /** @type {any} */ ("not bytes")), false);
+  assert.equal(isAllowedPaymentProof("constructor", Uint8Array.from([0xff, 0xd8, 0xff])), false);
 });
