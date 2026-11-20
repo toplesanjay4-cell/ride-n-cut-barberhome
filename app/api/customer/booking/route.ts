@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { createHmac, randomUUID } from "node:crypto";
 import { readJsonObjectRequest, readRequestBytesWithinLimit } from "@/lib/request-json.mjs";
+import { isAllowedPaymentProof } from "@/lib/payment-proof.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -139,9 +140,13 @@ export async function POST(request: Request) {
   if (typeof File === "undefined" || !(file instanceof File) || file.size < 1 || file.size > MAX_PROOF_BYTES || !ALLOWED_PROOF_TYPES.has(file.type)) {
     return reply({ error: "File harus JPG, PNG, WEBP, atau PDF dengan ukuran maksimal 5 MB." }, 400);
   }
+  const proofBytes = new Uint8Array(await file.arrayBuffer());
+  if (!isAllowedPaymentProof(file.type, proofBytes)) {
+    return reply({ error: "Isi file tidak sesuai dengan format bukti pembayaran yang dipilih." }, 400);
+  }
   const extension = file.type === "image/jpeg" ? "jpg" : file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "pdf";
   const path = bookingId + "/" + randomUUID() + "." + extension;
-  const { error: uploadError } = await admin.storage.from("rnc-payment-proofs").upload(path, new Uint8Array(await file.arrayBuffer()), { upsert: false, contentType: file.type });
+  const { error: uploadError } = await admin.storage.from("rnc-payment-proofs").upload(path, proofBytes, { upsert: false, contentType: file.type });
   if (uploadError) return reply({ error: "Upload bukti pembayaran gagal. Coba lagi atau hubungi admin." }, 400);
   const { data, error } = await admin.rpc("customer_attach_payment_proof", { p_phone: phone, p_code: code, p_booking_id: bookingId, p_proof_path: path });
   if (error || data !== true) {
