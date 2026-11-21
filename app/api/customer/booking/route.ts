@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { createHmac, randomUUID } from "node:crypto";
 import { readJsonObjectRequest, readRequestBytesWithinLimit } from "@/lib/request-json.mjs";
 import { isAllowedPaymentProof } from "@/lib/payment-proof.mjs";
+import { getTrustedClientIp } from "@/lib/client-ip.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,11 +27,7 @@ function normalizedPhone(value: unknown): string {
 }
 
 function requestIp(request: Request): string {
-  const trusted = request.headers.get("x-vercel-forwarded-for") || request.headers.get("x-real-ip");
-  const forwarded = request.headers.get("x-forwarded-for");
-  const value = trusted || (forwarded ? forwarded.split(",").map((part) => part.trim()).filter(Boolean).at(-1) : "");
-  if (value) return value.trim().slice(0, 128);
-  return process.env.NODE_ENV !== "production" ? "127.0.0.1" : "";
+  return getTrustedClientIp(request.headers);
 }
 
 async function enforceRateLimit(admin: SupabaseClient, request: Request, action: string, phone: string) {
