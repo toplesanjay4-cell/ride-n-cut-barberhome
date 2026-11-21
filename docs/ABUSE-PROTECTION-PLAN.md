@@ -21,7 +21,8 @@ The migration and route are committed to this branch, but the migration has **no
 
 - Apply all migrations to a backed-up non-production Supabase project and run `supabase/tests/rnc_security_smoke_test.sql` as documented.
 - Verify direct anonymous/authenticated execution is denied for every protected RPC overload, while the server role can execute them.
-- Verify the Vercel-provided client IP header used by `requestIp()` in Preview. Do not rely on untrusted forwarding headers; test spoofed `x-forwarded-for` and `x-real-ip` values through the actual hosting proxy.
+- In production, `requestIp()` trusts only a syntactically valid, single-address `x-vercel-forwarded-for` value. It deliberately ignores `x-forwarded-for` and `x-real-ip`; if the platform header is absent or malformed, the route fails closed with 503. Development uses a fixed loopback identity. Unit tests cover spoofed fallback headers, malformed values, IPv4, IPv6, and development behavior.
+- Verify the `x-vercel-forwarded-for` value supplied to Preview requests through the actual hosting proxy before enabling customer access. If the deployment does not provide this header, configure the trusted hosting boundary rather than restoring client-controlled fallbacks.
 - Add route/integration tests for IP and phone thresholds, window expiry, concurrent requests, malformed rate-limit responses, 429/`Retry-After`, and database/secret failure.
 - Test Storage policies independently: customers must not upload directly, the server can upload, the bucket stays private, and only authorized admins can obtain signed read URLs.
 - Observe legitimate traffic before changing the current hard-coded per-action limits. Do not log booking codes, full phone numbers, addresses, IP addresses, or proof contents.
