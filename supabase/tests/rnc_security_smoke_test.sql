@@ -259,7 +259,7 @@ begin
     raise exception 'FAIL: public booking creation or minimal availability RPC grants are missing';
   end if;
 
-  -- Phone/code-based customer actions must be callable only by the server role.
+  -- Every protected customer RPC overload must be server-only.
   select count(distinct p.proname) into v_policy_count
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
@@ -269,21 +269,73 @@ begin
       'customer_booking_cancellation_status', 'customer_approve_booking_quote',
       'customer_select_booking_payment', 'customer_attach_payment_proof',
       'customer_request_booking_cancellation', 'rnc_can_upload_payment_proof'
-    ])
-    and not has_function_privilege('anon', p.oid, 'EXECUTE')
-    and not has_function_privilege('authenticated', p.oid, 'EXECUTE')
-    and has_function_privilege('service_role', p.oid, 'EXECUTE');
+    ]);
   if v_policy_count <> 9 then
-    raise exception 'FAIL: customer phone/code RPCs are not restricted to service_role';
+    raise exception 'FAIL: one or more protected customer RPC names are missing';
+  end if;
+
+  if exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = any(array[
+        'customer_booking_history', 'customer_booking_quote', 'customer_booking_payment',
+        'customer_booking_cancellation_status', 'customer_approve_booking_quote',
+        'customer_select_booking_payment', 'customer_attach_payment_proof',
+        'customer_request_booking_cancellation', 'rnc_can_upload_payment_proof'
+      ])
+      and (
+        has_function_privilege('anon', p.oid, 'EXECUTE')
+        or has_function_privilege('authenticated', p.oid, 'EXECUTE')
+        or not has_function_privilege('service_role', p.oid, 'EXECUTE')
+      )
+  ) then
+    raise exception 'FAIL: every protected customer RPC overload must be server-only';
   end if;
 
   if to_regclass('public.rnc_customer_rate_limits') is null
-     or to_regprocedure('public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)') is null
+     or to_regprocedure('public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)') is null then
+    raise exception 'FAIL: private database-backed customer rate limiter is missing';
+  end if;
+
+  -- Private rate-limit table must have RLS and no client grants.
+  select c.relrowsecurity into v_enabled
+  from pg_class c
+  where c.oid = 'public.rnc_customer_rate_limits'::regclass;
+  if coalesce(v_enabled, false) is not true
      or has_table_privilege('anon', 'public.rnc_customer_rate_limits', 'SELECT')
+     or has_table_privilege('anon', 'public.rnc_customer_rate_limits', 'INSERT')
+     or has_table_privilege('anon', 'public.rnc_customer_rate_limits', 'UPDATE')
+     or has_table_privilege('anon', 'public.rnc_customer_rate_limits', 'DELETE')
      or has_table_privilege('authenticated', 'public.rnc_customer_rate_limits', 'SELECT')
+     or has_table_privilege('authenticated', 'public.rnc_customer_rate_limits', 'INSERT')
+     or has_table_privilege('authenticated', 'public.rnc_customer_rate_limits', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.rnc_customer_rate_limits', 'DELETE')
+     or not has_table_privilege('service_role', 'public.rnc_customer_rate_limits', 'SELECT')
+     or not has_table_privilege('service_role', 'public.rnc_customer_rate_limits', 'INSERT')
+     or not has_table_privilege('service_role', 'public.rnc_customer_rate_limits', 'UPDATE')
+     or not has_table_privilege('service_role', 'public.rnc_customer_rate_limits', 'DELETE') then
+    raise exception 'FAIL: private rate-limit table must have RLS and no client grants';
+  end if;
+
+  -- Rate-limit RPC must be SECURITY DEFINER, postgres-owned, and search_path locked.
+  select p.prosecdef into v_enabled
+  from pg_proc p
+  where p.oid = 'public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)'::regprocedure;
+  if coalesce(v_enabled, false) is not true
+     or not exists (
+       select 1
+       from pg_proc p
+       join pg_roles r on r.oid = p.proowner
+       where p.oid = 'public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)'::regprocedure
+         and r.rolname = 'postgres'
+         and 'search_path=public' = any(coalesce(p.proconfig, array[]::text[]))
+     )
      or has_function_privilege('anon', 'public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)', 'EXECUTE')
      or not has_function_privilege('service_role', 'public.rnc_consume_customer_rate_limit(text,text,integer,integer,integer)', 'EXECUTE') then
-    raise exception 'FAIL: private database-backed customer rate limiter is missing or exposed';
+    raise exception 'FAIL: rate-limit RPC must be SECURITY DEFINER, postgres-owned, and search_path locked';
   end if;
 
   if exists (
