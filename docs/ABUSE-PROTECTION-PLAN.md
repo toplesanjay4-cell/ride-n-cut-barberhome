@@ -11,7 +11,7 @@ Customer history and follow-up actions use a WhatsApp number plus a five-digit b
 - A private Postgres counter table and atomic SECURITY DEFINER RPC share counters across application instances. Raw phone numbers and IP addresses are not stored.
 - The route derives separate, operation-scoped IP and phone keys with HMAC-SHA256. Both use the same server-only secret with distinct `ip:` and `phone:` domain prefixes; this provides key separation without storing either input.
 - Current route limits are: lookup 30/IP and 5/phone per 15 minutes; other actions 40/IP and 10/phone per 15 minutes; proof upload 20/IP and 4/phone per hour.
-- Rate-limit configuration failures fail closed with a generic 503. Exceeded limits return 429 and `Retry-After`.
+- Rate-limit configuration failures fail closed with a generic 503. Exceeded limits return 429 and `Retry-After`. Action thresholds are centralized in a server-owned policy module; the RPC response must contain exactly one row with a boolean decision and a bounded integer retry interval, otherwise the route fails closed with 503. Unit tests cover policy selection and malformed/ambiguous RPC responses.
 - Customer proof upload is handled by the server route; the migration removes the previous customer Storage upload policy. The proof bucket remains private and admins use short-lived signed URLs.
 - The route checks the claimed MIME type against the file's leading JPEG, PNG, WEBP, or PDF signature before upload. This is format validation only; it is not malware scanning or PDF sanitization.
 
@@ -23,7 +23,7 @@ The migration and route are committed to this branch, but the migration has **no
 - Verify direct anonymous/authenticated execution is denied for every protected RPC overload, while the server role can execute them.
 - In production, `requestIp()` trusts only a syntactically valid, single-address `x-forwarded-for` value. Vercel documents that it overwrites this header to prevent IP spoofing. The route deliberately ignores `x-real-ip` and `x-vercel-forwarded-for`; if the trusted header is absent or malformed, it fails closed with 503. Development uses a fixed loopback identity. Unit tests cover spoofed fallback headers, malformed values, IPv4, IPv6, and development behavior.
 - Verify the `x-forwarded-for` value in Preview through the actual hosting path. When another proxy sits in front of Vercel, Vercel may report the proxy's address instead of the end user's address; this is safer than trusting a client-controlled fallback but may reduce per-IP rate-limit accuracy. Do not restore untrusted fallbacks.
-- Add route/integration tests for IP and phone thresholds, window expiry, concurrent requests, malformed rate-limit responses, 429/`Retry-After`, and database/secret failure.
+- Add route/integration tests for IP and phone thresholds, window expiry, concurrent requests, 429/`Retry-After`, and database/secret failure. The pure policy and malformed-RPC-response checks are covered by Node unit tests; they do not replace database-backed integration tests.
 - Test Storage policies independently: customers must not upload directly, the server can upload, the bucket stays private, and only authorized admins can obtain signed read URLs.
 - Observe legitimate traffic before changing the current hard-coded per-action limits. Do not log booking codes, full phone numbers, addresses, IP addresses, or proof contents.
 
