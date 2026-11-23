@@ -4,6 +4,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { readJsonObjectRequest, readRequestBytesWithinLimit } from "@/lib/request-json.mjs";
 import { isAllowedPaymentProof } from "@/lib/payment-proof.mjs";
 import { getTrustedClientIp } from "@/lib/client-ip.mjs";
+import { getCustomerRateLimitPolicy, parseCustomerRateLimitResult } from "@/lib/customer-rate-limit.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,21 +35,23 @@ async function enforceRateLimit(admin: SupabaseClient, request: Request, action:
   const secret = process.env.RNC_RATE_LIMIT_HMAC_SECRET;
   const ip = requestIp(request);
   if (!secret || secret.length < 32 || !ip) return { ok: false as const, unavailable: true as const, retryAfter: 0 };
+  const policy = getCustomerRateLimitPolicy(action);
+  if (!policy) return { ok: false as const, unavailable: true as const, retryAfter: 0 };
+
   const ipHash = createHmac("sha256", secret).update("ip:" + action + ":" + ip).digest("hex");
   const phoneHash = createHmac("sha256", secret).update("phone:" + action + ":" + phone).digest("hex");
-  const isLookup = action === "lookup";
-  const isUpload = action === "upload_proof";
   const { data, error } = await admin.rpc("rnc_consume_customer_rate_limit", {
     p_ip_key_hash: ipHash,
     p_phone_key_hash: phoneHash,
-    p_ip_limit: isLookup ? 30 : isUpload ? 20 : 40,
-    p_phone_limit: isLookup ? 5 : isUpload ? 4 : 10,
-    p_window_seconds: isUpload ? 3600 : 900,
+    p_ip_limit: policy.ipLimit,
+    p_phone_limit: policy.phoneLimit,
+    p_window_seconds: policy.windowSeconds,
   });
   if (error) return { ok: false as const, unavailable: true as const, retryAfter: 0 };
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row || typeof row.allowed !== "boolean") return { ok: false as const, unavailable: true as const, retryAfter: 0 };
-  return { ok: row.allowed, unavailable: false as const, retryAfter: Number(row.retry_after_seconds) || 0 };
+
+  const decision = parseCustomerRateLimitResult(data);
+  if (!decision) return { ok: false as const, unavailable: true as const, retryAfter: 0 };
+  return { ok: decision.allowed, unavailable: false as const, retryAfter: decision.retryAfter };
 }
 
 function validIdentity(phone: string, code: string) {
