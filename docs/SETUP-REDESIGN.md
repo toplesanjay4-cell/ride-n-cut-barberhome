@@ -17,7 +17,18 @@ This redesign is being developed on `redesign/ride-n-cut-overhaul`. Do not deplo
 4. Run the remaining migrations in filename order: `20261116000100_rnc_atomic_booking_slots.sql`, `20261116000200_rnc_service_duration_booking.sql`, `20261116000300_rnc_booking_horizon_guard.sql`, `20261116000400_rnc_lock_payment_writes.sql`, `20261116000500_rnc_validate_payment_verification.sql`, `20261116000600_rnc_lock_booking_during_payment_verify.sql`, `20261116000700_rnc_enforce_owner_price_settings.sql`, `20261116000800_rnc_customer_map_pin.sql`, `20261116000900_rnc_limit_public_settings_columns.sql`, `20261116001000_rnc_serialize_customer_payment_actions.sql`, `20261116001100_rnc_atomic_admin_reschedule.sql`, `20261116001200_rnc_admin_review_customer_cancellation.sql`, `20261116001300_rnc_enforce_operating_schedule.sql`, and `20261116001400_rnc_validate_admin_booking_status.sql`, `20261116001500_rnc_owner_only_quote_edits.sql`, and `20261116001600_rnc_bound_booking_buffer.sql`, then `20261116001700_rnc_public_booking_buffer.sql` and `20261116001800_rnc_restrict_owner_role_provisioning.sql`, followed by `20261116001900_rnc_record_external_payment_refunds.sql`, `20261116002000_rnc_freeze_customer_payment_during_cancellation.sql`, and `20261116002100_rnc_harden_cancellation_transition_guards.sql`, and `20261116002200_rnc_guard_booking_state_columns.sql`, and `20261116002300_rnc_private_booking_reads.sql`, then `20261119000100_rnc_rate_limit_customer_access.sql`.
 5. Verify the new tables exist: `user_roles`, `services`, `payment_methods`, `booking_price_quotes`, `booking_payments`, `expense_categories`, and `expenses`.
 6. Verify the new nullable/defaulted columns on `bookings` and `site_settings`.
-7. Verify the private Storage bucket `rnc-payment-proofs` exists, with a 5 MB limit and image/PDF MIME restrictions. The migration adds upload/read policies tied to booking ID, booking code, and phone number.
+7. Verify the private Storage bucket `rnc-payment-proofs` exists, with a 5 MB limit and image/PDF MIME restrictions. The initial schema migration creates scoped customer-upload and staff-read policies. The later rate-limit migration deliberately removes direct customer uploads; customers now upload through the server-side booking API using the service role. Do not restore the direct customer upload policy.
+
+
+## Verify database behavior
+
+After all 25 migrations are applied to the backed-up non-production project:
+
+1. Run `supabase/tests/rnc_security_smoke_test.sql` as the `postgres` role. This is a read-only privilege, RLS, function-ownership, and Storage-policy check.
+2. Run `supabase/tests/rnc_rate_limit_behavior_test.sql` as the `postgres` role. It calls the real rate-limit RPC to check independent IP and phone thresholds plus fixed-window expiry. Its nested exception subtransaction intentionally rolls back all test counter writes on success; failures also roll back the subtransaction. Look for the `PASS: rate-limit thresholds and window expiry verified` notice.
+3. These SQL checks do not simulate concurrent HTTP requests or exercise the deployed proxy/API path. Those checks remain required in Preview.
+
+Run both scripts only after confirming the SQL Editor is connected to the intended non-production project. Do not run behavior tests against production.
 
 ## Bootstrap the owner role
 
