@@ -19,18 +19,18 @@ The migration and route are committed to this branch, but the migration has **no
 
 ## Remaining verification
 
-- Apply all migrations to a backed-up non-production Supabase project and run `supabase/tests/rnc_security_smoke_test.sql` as documented.
+- Apply all migrations to a backed-up non-production Supabase project, then run `supabase/tests/rnc_security_smoke_test.sql` and `supabase/tests/rnc_rate_limit_behavior_test.sql` as the `postgres` role. The first is read-only; the second uses a nested exception subtransaction to roll back its test counter writes.
 - Verify direct anonymous/authenticated execution is denied for every protected RPC overload, while the server role can execute them.
 - In production, `requestIp()` trusts only a syntactically valid, single-address `x-forwarded-for` value. Vercel documents that it overwrites this header to prevent IP spoofing. The route deliberately ignores `x-real-ip` and `x-vercel-forwarded-for`; if the trusted header is absent or malformed, it fails closed with 503. Development uses a fixed loopback identity. Unit tests cover spoofed fallback headers, malformed values, IPv4, IPv6, and development behavior.
 - Verify the `x-forwarded-for` value in Preview through the actual hosting path. When another proxy sits in front of Vercel, Vercel may report the proxy's address instead of the end user's address; this is safer than trusting a client-controlled fallback but may reduce per-IP rate-limit accuracy. Do not restore untrusted fallbacks.
-- Add route/integration tests for IP and phone thresholds, window expiry, concurrent requests, 429/`Retry-After`, and database/secret failure. The pure policy and malformed-RPC-response checks are covered by Node unit tests; they do not replace database-backed integration tests.
+- Add route/integration tests for concurrent requests, HTTP 429/`Retry-After`, and database/secret failure. The rollback-safe SQL behavior test now covers sequential IP and phone thresholds plus fixed-window expiry; the pure policy and malformed-RPC-response Node tests do not replace deployed route/integration tests.
 - Test Storage policies independently: customers must not upload directly, the server can upload, the bucket stays private, and only authorized admins can obtain signed read URLs.
 - Observe legitimate traffic before changing the current hard-coded per-action limits. Do not log booking codes, full phone numbers, addresses, IP addresses, or proof contents.
 
 ## Safe rollout order
 
 1. Back up a **non-production** Supabase project.
-2. Apply the 25 ordered migrations there, verify the existing owner UUID, and run the read-only security smoke test.
+2. Apply the 25 ordered migrations there, verify the existing owner UUID, and run both the read-only security smoke test and rollback-safe rate-limit behavior test.
 3. Configure a unique server-only HMAC secret and service-role key in Vercel Preview; never expose either through a `NEXT_PUBLIC_` variable or commit a real value.
 4. Verify proxy IP handling, rate-limit behavior, protected RPC grants, Storage policies, and the complete customer/admin flows in Preview.
 5. Only after staging checks pass, plan a separately reviewed production backup and migration window. No production migration or deployment is authorized by this branch work.
