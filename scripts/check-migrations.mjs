@@ -108,5 +108,5 @@ if (errors.length) {
   for (const error of errors) console.error(`- ${error}`);
   process.exitCode = 1;
 } else {
-  console.log(`Migration integrity check passed: ${files.length} ordered migrations, setup guide, and security smoke test.`);
+  console.log(`Migration integrity check passed: ${files.length} ordered migrations, setup guide, security smoke test, and rate-limit behavior test.`);
 }
