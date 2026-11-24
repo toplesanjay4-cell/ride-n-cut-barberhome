@@ -86,6 +86,23 @@ for (const marker of [
   if (!smoke.includes(marker)) errors.push(`Security smoke test is missing check: ${marker}`);
 }
 
+
+const rateLimitBehavior = await readFile(
+  join(process.cwd(), "supabase", "tests", "rnc_rate_limit_behavior_test.sql"),
+  "utf8",
+);
+for (const marker of [
+  "rnc_consume_customer_rate_limit",
+  "v_index in 1..3",
+  "window_started_at = clock_timestamp() - interval '61 seconds'",
+  "RNC_RATE_LIMIT_TEST_ROLLBACK",
+  "rate-limit thresholds and window expiry verified",
+]) {
+  if (!rateLimitBehavior.includes(marker)) {
+    errors.push(`Rate-limit behavior test is missing check: ${marker}`);
+  }
+}
+
 if (errors.length) {
   console.error("Migration integrity check failed:");
   for (const error of errors) console.error(`- ${error}`);
