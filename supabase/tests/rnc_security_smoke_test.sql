@@ -51,6 +51,44 @@ begin
     raise exception 'FAIL: active owner/staff booking read policies are missing or invalid';
   end if;
 
+  -- user_roles must have a closed, reviewed policy set. Extra permissive
+  -- policies can OR with the staff-only policies and silently widen access.
+  select count(*) into v_policy_count
+  from pg_policies
+  where schemaname = 'public' and tablename = 'user_roles';
+  if v_policy_count <> 4 then
+    raise exception 'FAIL: user_roles must have exactly the own-role read policy and three staff-only owner policies';
+  end if;
+
+  if exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'user_roles'
+      and policyname not in (
+        'rnc users read own role',
+        'rnc owner creates staff roles',
+        'rnc owner updates staff roles',
+        'rnc owner deletes staff roles'
+      )
+  ) then
+    raise exception 'FAIL: an unreviewed user_roles policy could widen role access';
+  end if;
+
+  select count(*) into v_policy_count
+  from pg_policies
+  where schemaname = 'public'
+    and tablename = 'user_roles'
+    and policyname = 'rnc users read own role'
+    and cmd = 'SELECT'
+    and permissive = 'PERMISSIVE'
+    and roles = ARRAY['authenticated']::name[]
+    and coalesce(qual, '') ilike '%auth.uid%'
+    and coalesce(qual, '') ilike '%rnc_has_role%owner%';
+  if v_policy_count <> 1 then
+    raise exception 'FAIL: users must only read their own role, with owner visibility explicitly scoped';
+  end if;
+
   -- The old all-actions owner policy must not survive the hardening migration.
   select count(*) into v_policy_count
   from pg_policies
