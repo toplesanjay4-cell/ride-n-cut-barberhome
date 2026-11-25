@@ -59,6 +59,9 @@ for (const name of expected) {
 const smoke = await readFile(join(process.cwd(), "supabase", "tests", "rnc_security_smoke_test.sql"), "utf8");
 for (const marker of [
   "rnc owner creates staff roles",
+  "user_roles must have exactly the own-role read policy and three staff-only owner policies",
+  "an unreviewed user_roles policy could widen role access",
+  "users must only read their own role, with owner visibility explicitly scoped",
   "rnc owner updates staff roles",
   "rnc owner deletes staff roles",
   "rnc owner creates quotes",
