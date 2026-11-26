@@ -5,6 +5,7 @@ import { readJsonObjectRequest, readRequestBytesWithinLimit } from "@/lib/reques
 import { isAllowedPaymentProof } from "@/lib/payment-proof.mjs";
 import { getTrustedClientIp } from "@/lib/client-ip.mjs";
 import { getCustomerRateLimitPolicy, parseCustomerRateLimitResult } from "@/lib/customer-rate-limit.mjs";
+import { isValidBookingId, isValidCustomerIdentity, normalizeCustomerPhone } from "@/lib/customer-identity.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +22,6 @@ function getAdminClient(): SupabaseClient | null {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) return null;
   return createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-}
-
-function normalizedPhone(value: unknown): string {
-  return typeof value === "string" ? value.replace(/[^0-9]/g, "") : "";
 }
 
 function requestIp(request: Request): string {
@@ -82,12 +79,12 @@ export async function POST(request: Request) {
   }
 
   const action = typeof body.action === "string" ? body.action : "";
-  const phone = normalizedPhone(body.phone);
+  const phone = normalizeCustomerPhone(body.phone);
   const code = typeof body.code === "string" ? body.code.trim() : "";
   const bookingId = typeof body.booking_id === "string" ? body.booking_id : "";
   if (!["lookup", "approve_quote", "select_payment", "cancel_booking", "upload_proof"].includes(action)) return reply({ error: "Permintaan tidak valid." }, 400);
-  if (!validIdentity(phone, code)) return reply({ error: "Nomor WhatsApp atau kode booking tidak valid." }, 400);
-  if (["approve_quote", "select_payment", "cancel_booking", "upload_proof"].includes(action) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(bookingId)) return reply({ error: "Booking tidak ditemukan." }, 400);
+  if (!isValidCustomerIdentity(phone, code)) return reply({ error: "Nomor WhatsApp atau kode booking tidak valid." }, 400);
+  if (["approve_quote", "select_payment", "cancel_booking", "upload_proof"].includes(action) && !isValidBookingId(bookingId)) return reply({ error: "Booking tidak ditemukan." }, 400);
 
   const admin = getAdminClient();
   if (!admin) return reply({ error: "Layanan pelanggan belum dikonfigurasi. Silakan hubungi admin." }, 503);
