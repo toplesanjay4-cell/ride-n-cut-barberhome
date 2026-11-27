@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/:path*",
-        headers: getGlobalSecurityHeaders(),
+        headers: getGlobalSecurityHeaders(process.env.VERCEL_ENV),
       },
     ];
   },
