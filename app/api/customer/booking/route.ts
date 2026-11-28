@@ -4,7 +4,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { readJsonObjectRequest, readRequestBytesWithinLimit } from "@/lib/request-json.mjs";
 import { isAllowedPaymentProof } from "@/lib/payment-proof.mjs";
 import { getTrustedClientIp } from "@/lib/client-ip.mjs";
-import { getCustomerRateLimitPolicy, parseCustomerRateLimitResult } from "@/lib/customer-rate-limit.mjs";
+import { consumeCustomerRateLimit, getCustomerRateLimitPolicy } from "@/lib/customer-rate-limit.mjs";
 import { isValidBookingId, isValidCustomerIdentity, normalizeCustomerPhone } from "@/lib/customer-identity.mjs";
 
 export const runtime = "nodejs";
@@ -37,22 +37,13 @@ async function enforceRateLimit(admin: SupabaseClient, request: Request, action:
 
   const ipHash = createHmac("sha256", secret).update("ip:" + action + ":" + ip).digest("hex");
   const phoneHash = createHmac("sha256", secret).update("phone:" + action + ":" + phone).digest("hex");
-  const { data, error } = await admin.rpc("rnc_consume_customer_rate_limit", {
+  return consumeCustomerRateLimit(admin, {
     p_ip_key_hash: ipHash,
     p_phone_key_hash: phoneHash,
     p_ip_limit: policy.ipLimit,
     p_phone_limit: policy.phoneLimit,
     p_window_seconds: policy.windowSeconds,
   });
-  if (error) return { ok: false as const, unavailable: true as const, retryAfter: 0 };
-
-  const decision = parseCustomerRateLimitResult(data);
-  if (!decision) return { ok: false as const, unavailable: true as const, retryAfter: 0 };
-  return { ok: decision.allowed, unavailable: false as const, retryAfter: decision.retryAfter };
-}
-
-function validIdentity(phone: string, code: string) {
-  return phone.length >= 8 && phone.length <= 16 && /^\d{5}$/.test(code);
 }
 
 export async function POST(request: Request) {
